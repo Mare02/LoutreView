@@ -17,7 +17,7 @@
 #define VERSION "1.0.0"
 #define DEFAULT_LIMIT 12
 #define MIN_INTERVAL_MS 250
-#define HISTORY_SIZE 48
+#define MAX_CPU_CORES 128
 
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -28,6 +28,12 @@
 #define ANSI_AMBER "\033[38;5;221m"
 #define ANSI_RED "\033[38;5;203m"
 #define ANSI_SLATE "\033[38;5;246m"
+#define ANSI_ALT_SCREEN "\033[?1049h"
+#define ANSI_MAIN_SCREEN "\033[?1049l"
+#define ANSI_HIDE_CURSOR "\033[?25l"
+#define ANSI_SHOW_CURSOR "\033[?25h"
+#define ANSI_MOUSE_ON "\033[?1000h\033[?1006h"
+#define ANSI_MOUSE_OFF "\033[?1006l\033[?1000l"
 
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
 
@@ -52,6 +58,8 @@ typedef struct {
 
 typedef struct {
     CpuTicks ticks;
+    CpuTicks core_ticks[MAX_CPU_CORES];
+    size_t core_count;
     double timestamp;
     ProcessList processes;
 } Snapshot;
@@ -64,14 +72,6 @@ typedef struct {
     bool no_color;
     SortMode sort;
 } Options;
-
-typedef struct {
-    double cpu[HISTORY_SIZE];
-    double memory[HISTORY_SIZE];
-    double load[HISTORY_SIZE];
-    size_t count;
-    size_t next;
-} History;
 
 static volatile sig_atomic_t running = 1;
 
@@ -98,7 +98,7 @@ static const char *format_bytes(unsigned long long bytes, char *buffer, size_t s
     return buffer;
 }
 
-static bool read_cpu_ticks(CpuTicks *out) {
+static bool read_cpu_ticks(CpuTicks *out, CpuTicks *cores, size_t *core_count) {
     natural_t cpu_count = 0;
     processor_info_array_t info = NULL;
     mach_msg_type_number_t info_count = 0;
@@ -107,6 +107,7 @@ static bool read_cpu_ticks(CpuTicks *out) {
     if (result != KERN_SUCCESS || info == NULL) return false;
 
     memset(out, 0, sizeof(*out));
+    *core_count = cpu_count < MAX_CPU_CORES ? cpu_count : MAX_CPU_CORES;
     for (natural_t i = 0; i < cpu_count; i++) {
         processor_cpu_load_info_t cpu =
             (processor_cpu_load_info_t)(info + i * CPU_STATE_MAX);
@@ -114,6 +115,14 @@ static bool read_cpu_ticks(CpuTicks *out) {
         out->system += cpu->cpu_ticks[CPU_STATE_SYSTEM];
         out->idle += cpu->cpu_ticks[CPU_STATE_IDLE];
         out->nice += cpu->cpu_ticks[CPU_STATE_NICE];
+        if (i < *core_count) {
+            cores[i] = (CpuTicks){
+                .user = cpu->cpu_ticks[CPU_STATE_USER],
+                .system = cpu->cpu_ticks[CPU_STATE_SYSTEM],
+                .idle = cpu->cpu_ticks[CPU_STATE_IDLE],
+                .nice = cpu->cpu_ticks[CPU_STATE_NICE],
+            };
+        }
     }
     vm_deallocate(mach_task_self(), (vm_address_t)info, (vm_size_t)info_count * sizeof(integer_t));
     return true;
@@ -254,14 +263,6 @@ static void sort_processes(ProcessList *list, SortMode sort) {
     qsort(list->items, list->count, sizeof(Process), compare);
 }
 
-static void history_push(History *history, double cpu, double memory, double load) {
-    history->cpu[history->next] = cpu;
-    history->memory[history->next] = memory;
-    history->load[history->next] = load;
-    history->next = (history->next + 1) % HISTORY_SIZE;
-    if (history->count < HISTORY_SIZE) history->count++;
-}
-
 static int terminal_width(void) {
     struct winsize window = {0};
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window) == 0 && window.ws_col > 0) return window.ws_col;
@@ -286,24 +287,29 @@ static void print_bar(double percent, int width, bool color) {
     if (color) fputs(ANSI_RESET, stdout);
 }
 
-static void print_trace(const double *values, const History *history, int width, double scale, bool color) {
-    static const char *blocks[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
-    size_t shown = history->count < (size_t)width ? history->count : (size_t)width;
-    size_t start = history->count == HISTORY_SIZE ? history->next : 0;
-    if (history->count > shown) start = (start + history->count - shown) % HISTORY_SIZE;
-    int blanks = width - (int)shown;
-    if (color) fputs(ANSI_SLATE, stdout);
-    for (int i = 0; i < blanks; i++) putchar(' ');
-    for (size_t i = 0; i < shown; i++) {
-        size_t index = (start + i) % HISTORY_SIZE;
-        double normalized = scale > 0 ? values[index] / scale : 0;
-        int level = (int)(normalized * 7.0 + 0.5);
-        if (level < 0) level = 0;
-        if (level > 7) level = 7;
-        if (color) fputs(level >= 6 ? ANSI_AMBER : ANSI_TEAL, stdout);
-        fputs(blocks[level], stdout);
-    }
+static void print_core_grid(const double *cores, size_t count, int width, bool color) {
+    int columns = width >= 92 ? 3 : width >= 62 ? 2 : 1;
+    const int meter_width = 6;
+
+    putchar('\n');
+    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    fputs("CPU CORES", stdout);
     if (color) fputs(ANSI_RESET, stdout);
+    putchar('\n');
+
+    for (size_t start = 0; start < count; start += (size_t)columns) {
+        for (int column = 0; column < columns && start + (size_t)column < count; column++) {
+            size_t index = start + (size_t)column;
+            if (color) fputs(ANSI_SLATE, stdout);
+            printf("  CORE %02zu ", index + 1);
+            if (color) fputs(ANSI_RESET, stdout);
+            print_bar(cores[index], meter_width, color);
+            printf(" %4.1f%%", cores[index]);
+            if (column + 1 < columns && start + (size_t)column + 1 < count) fputs("    ", stdout);
+        }
+        putchar('\n');
+    }
+    putchar('\n');
 }
 
 static void json_string(const char *value) {
@@ -337,7 +343,8 @@ static void print_json(const Snapshot *snapshot, double cpu, const Options *opti
 }
 
 static void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
-                         const History *history, bool clear, bool color) {
+                         const double *core_usage, size_t core_count,
+                         bool clear, bool color) {
     unsigned long long memory_total = 0, memory_used = 0, pressure = 0, disk_total = 0, disk_used = 0;
     get_memory(&memory_total, &memory_used, &pressure);
     get_disk(&disk_total, &disk_used);
@@ -353,7 +360,7 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     double disk_percent = disk_total ? 100.0 * (double)disk_used / disk_total : 0.0;
     int width = terminal_width();
     int bar_width = width >= 100 ? 28 : width >= 78 ? 18 : 10;
-    int trace_width = width >= 110 ? 48 : width >= 85 ? 36 : 24;
+    bool roomy_metrics = width >= 100;
     if (clear) fputs("\033[H\033[2J", stdout);
 
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
@@ -372,27 +379,24 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(cpu, bar_width, color);
     printf("  Load %.2f · %.2f · %.2f\n", loads[0], loads[1], loads[2]);
+    if (roomy_metrics) putchar('\n');
 
     if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
-    fputs("MEM         ", stdout);
+    printf("MEM  %5.1f%% ", memory_percent);
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(memory_percent, bar_width, color);
     printf("  %s / %s  %spressure %s%s\n", memory_used_text, memory_total_text,
            color ? ANSI_DIM : "", pressure_text, color ? ANSI_RESET : "");
+    if (roomy_metrics) putchar('\n');
 
     if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
-    fputs("DISK        ", stdout);
+    printf("DISK %5.1f%% ", disk_percent);
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(disk_percent, bar_width, color);
     printf("  %s / %s  %suptime %s%s\n", disk_used_text, disk_total_text,
            color ? ANSI_DIM : "", uptime, color ? ANSI_RESET : "");
 
-    printf("\n%sSIGNAL TRACE%s  CPU ", color ? ANSI_BOLD : "", color ? ANSI_RESET : "");
-    print_trace(history->cpu, history, trace_width, 100.0, color);
-    printf("  %5.1f%%\n", cpu);
-    printf("              MEM ");
-    print_trace(history->memory, history, trace_width, 100.0, color);
-    printf("  %5.1f%%\n\n", memory_percent);
+    print_core_grid(core_usage, core_count, width, color);
 
     if (color) fputs(ANSI_BOLD, stdout);
     printf("  PID    CPU%%     MEM  THR  PROCESS");
@@ -480,28 +484,32 @@ int main(int argc, char **argv) {
     signal(SIGINT, on_signal); signal(SIGTERM, on_signal);
 
     Snapshot previous = {0};
-    read_cpu_ticks(&previous.ticks);
+    read_cpu_ticks(&previous.ticks, previous.core_ticks, &previous.core_count);
     previous.timestamp = now_seconds();
     previous.processes = collect_processes(NULL, 0);
     usleep(200000);
 
     bool interactive = isatty(STDOUT_FILENO) && !options.once && !options.json;
     bool color = interactive && !options.no_color && getenv("NO_COLOR") == NULL;
-    History history = {0};
+    if (interactive) {
+        fputs(ANSI_ALT_SCREEN ANSI_HIDE_CURSOR ANSI_MOUSE_ON, stdout);
+        fflush(stdout);
+    }
     while (running) {
         Snapshot current = {0};
-        read_cpu_ticks(&current.ticks);
+        read_cpu_ticks(&current.ticks, current.core_ticks, &current.core_count);
         current.timestamp = now_seconds();
         double elapsed = current.timestamp - previous.timestamp;
         current.processes = collect_processes(&previous, elapsed);
         sort_processes(&current.processes, options.sort);
         double cpu = cpu_usage(&previous.ticks, &current.ticks);
-        unsigned long long memory_total = 0, memory_used = 0, pressure = 0;
-        get_memory(&memory_total, &memory_used, &pressure);
-        double loads[3] = {0}; getloadavg(loads, 3);
-        history_push(&history, cpu, memory_total ? 100.0 * (double)memory_used / memory_total : 0.0, loads[0]);
+        double core_usage[MAX_CPU_CORES] = {0};
+        size_t core_count = previous.core_count < current.core_count ? previous.core_count : current.core_count;
+        for (size_t i = 0; i < core_count; i++) {
+            core_usage[i] = cpu_usage(&previous.core_ticks[i], &current.core_ticks[i]);
+        }
         if (options.json) print_json(&current, cpu, &options);
-        else print_screen(&current, cpu, &options, &history, interactive, color);
+        else print_screen(&current, cpu, &options, core_usage, core_count, interactive, color);
         free_snapshot(&previous);
         previous = current;
         if (options.once) break;
@@ -511,5 +519,9 @@ int main(int argc, char **argv) {
         nanosleep(&delay, NULL);
     }
     free_snapshot(&previous);
+    if (interactive) {
+        fputs(ANSI_RESET ANSI_MOUSE_OFF ANSI_SHOW_CURSOR ANSI_MAIN_SCREEN, stdout);
+        fflush(stdout);
+    }
     return 0;
 }
