@@ -1,4 +1,6 @@
 #include <errno.h>
+#include <IOKit/ps/IOPowerSources.h>
+#include <IOKit/ps/IOPSKeys.h>
 #include <libproc.h>
 #include <mach/mach.h>
 #include <mach/mach_host.h>
@@ -55,6 +57,26 @@ typedef struct {
     Process *items;
     size_t count;
 } ProcessList;
+
+typedef struct {
+    bool available;
+    int percent;
+    bool charging;
+    bool charged;
+    int time_remaining_minutes;
+    char state[16];
+} BatteryInfo;
+
+typedef struct {
+    unsigned long long memory_total;
+    unsigned long long memory_used;
+    unsigned long long pressure;
+    unsigned long long disk_total;
+    unsigned long long disk_used;
+    double loads[3];
+    double uptime;
+    BatteryInfo battery;
+} SystemMetrics;
 
 typedef struct {
     CpuTicks ticks;
@@ -179,12 +201,91 @@ static void format_uptime(double seconds, char *buffer, size_t size) {
     else snprintf(buffer, size, "%lum", minutes);
 }
 
+static void format_duration_minutes(int minutes, char *buffer, size_t size) {
+    if (minutes >= 60) snprintf(buffer, size, "%dh %dm", minutes / 60, minutes % 60);
+    else snprintf(buffer, size, "%dm", minutes);
+}
+
+static bool cf_number_to_int(CFTypeRef value, int *out) {
+    return value && CFGetTypeID(value) == CFNumberGetTypeID() &&
+           CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, out);
+}
+
+static bool cf_boolean_value(CFTypeRef value) {
+    return value && CFGetTypeID(value) == CFBooleanGetTypeID() && CFBooleanGetValue((CFBooleanRef)value);
+}
+
+static bool cf_string_equal(CFTypeRef value, const char *expected) {
+    char text[64];
+    return value && CFGetTypeID(value) == CFStringGetTypeID() &&
+           CFStringGetCString((CFStringRef)value, text, sizeof(text), kCFStringEncodingUTF8) &&
+           strcmp(text, expected) == 0;
+}
+
+static bool get_battery(BatteryInfo *out) {
+    *out = (BatteryInfo){ .time_remaining_minutes = -1 };
+    CFTypeRef info = IOPSCopyPowerSourcesInfo();
+    if (!info) return false;
+    CFArrayRef sources = IOPSCopyPowerSourcesList(info);
+    if (!sources) {
+        CFRelease(info);
+        return false;
+    }
+
+    for (CFIndex i = 0; i < CFArrayGetCount(sources); i++) {
+        CFTypeRef source = CFArrayGetValueAtIndex(sources, i);
+        CFDictionaryRef description = IOPSGetPowerSourceDescription(info, source);
+        if (!description || !cf_string_equal(CFDictionaryGetValue(description, CFSTR(kIOPSTypeKey)),
+                                             kIOPSInternalBatteryType)) {
+            continue;
+        }
+
+        int current = 0, maximum = 0;
+        if (!cf_number_to_int(CFDictionaryGetValue(description, CFSTR(kIOPSCurrentCapacityKey)), &current) ||
+            !cf_number_to_int(CFDictionaryGetValue(description, CFSTR(kIOPSMaxCapacityKey)), &maximum) ||
+            current < 0 || maximum <= 0) {
+            continue;
+        }
+        out->available = true;
+        out->percent = (int)(100.0 * current / maximum + 0.5);
+        if (out->percent > 100) out->percent = 100;
+        out->charging = cf_boolean_value(CFDictionaryGetValue(description, CFSTR(kIOPSIsChargingKey)));
+        out->charged = cf_boolean_value(CFDictionaryGetValue(description, CFSTR(kIOPSIsChargedKey)));
+
+        CFTypeRef power_state = CFDictionaryGetValue(description, CFSTR(kIOPSPowerSourceStateKey));
+        if (out->charged) snprintf(out->state, sizeof(out->state), "charged");
+        else if (out->charging) snprintf(out->state, sizeof(out->state), "charging");
+        else if (cf_string_equal(power_state, kIOPSBatteryPowerValue)) snprintf(out->state, sizeof(out->state), "discharging");
+        else if (cf_string_equal(power_state, kIOPSACPowerValue)) snprintf(out->state, sizeof(out->state), "on power");
+        else snprintf(out->state, sizeof(out->state), "unknown");
+
+        if (out->charging || cf_string_equal(power_state, kIOPSBatteryPowerValue)) {
+            CFStringRef time_key = out->charging ? CFSTR(kIOPSTimeToFullChargeKey) : CFSTR(kIOPSTimeToEmptyKey);
+            cf_number_to_int(CFDictionaryGetValue(description, time_key), &out->time_remaining_minutes);
+        }
+        break;
+    }
+    CFRelease(sources);
+    CFRelease(info);
+    return out->available;
+}
+
 static bool get_disk(unsigned long long *total, unsigned long long *used) {
     struct statfs stats;
     if (statfs("/", &stats) != 0) return false;
     *total = (unsigned long long)stats.f_blocks * stats.f_bsize;
     *used = (unsigned long long)(stats.f_blocks - stats.f_bavail) * stats.f_bsize;
     return true;
+}
+
+static SystemMetrics collect_system_metrics(void) {
+    SystemMetrics metrics = {0};
+    get_memory(&metrics.memory_total, &metrics.memory_used, &metrics.pressure);
+    get_disk(&metrics.disk_total, &metrics.disk_used);
+    get_battery(&metrics.battery);
+    getloadavg(metrics.loads, 3);
+    metrics.uptime = get_uptime();
+    return metrics;
 }
 
 static unsigned long long process_cpu_time(const struct proc_taskinfo *task) {
@@ -322,15 +423,24 @@ static void json_string(const char *value) {
 }
 
 static void print_json(const Snapshot *snapshot, double cpu, const Options *options) {
-    unsigned long long memory_total = 0, memory_used = 0, pressure = 0, disk_total = 0, disk_used = 0;
-    get_memory(&memory_total, &memory_used, &pressure);
-    get_disk(&disk_total, &disk_used);
-    double loads[3] = {0}; getloadavg(loads, 3);
-    printf("{\"cpu\":{\"usage_percent\":%.1f,\"load\":[%.2f,%.2f,%.2f]},", cpu, loads[0], loads[1], loads[2]);
-    printf("\"memory\":{\"total_bytes\":%llu,\"used_bytes\":%llu,\"pressure_bytes\":%llu},", memory_total, memory_used, pressure);
-    double uptime = get_uptime();
-    printf("\"disk\":{\"total_bytes\":%llu,\"used_bytes\":%llu},\"uptime_seconds\":", disk_total, disk_used);
-    if (uptime < 0) fputs("null", stdout); else printf("%.0f", uptime);
+    SystemMetrics metrics = collect_system_metrics();
+    printf("{\"cpu\":{\"usage_percent\":%.1f,\"load\":[%.2f,%.2f,%.2f]},", cpu,
+           metrics.loads[0], metrics.loads[1], metrics.loads[2]);
+    printf("\"memory\":{\"total_bytes\":%llu,\"used_bytes\":%llu,\"pressure_bytes\":%llu},",
+           metrics.memory_total, metrics.memory_used, metrics.pressure);
+    printf("\"disk\":{\"total_bytes\":%llu,\"used_bytes\":%llu},\"uptime_seconds\":",
+           metrics.disk_total, metrics.disk_used);
+    if (metrics.uptime < 0) fputs("null", stdout); else printf("%.0f", metrics.uptime);
+    fputs(",\"battery\":", stdout);
+    if (!metrics.battery.available) {
+        fputs("null", stdout);
+    } else {
+        printf("{\"percent\":%d,\"state\":\"%s\",\"time_remaining_minutes\":",
+               metrics.battery.percent, metrics.battery.state);
+        if (metrics.battery.time_remaining_minutes < 0) fputs("null", stdout);
+        else printf("%d", metrics.battery.time_remaining_minutes);
+        putchar('}');
+    }
     fputs(",\"processes\":[", stdout);
     size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
     for (size_t i = 0; i < count; i++) {
@@ -345,19 +455,16 @@ static void print_json(const Snapshot *snapshot, double cpu, const Options *opti
 static void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
                          const double *core_usage, size_t core_count,
                          bool clear, bool color) {
-    unsigned long long memory_total = 0, memory_used = 0, pressure = 0, disk_total = 0, disk_used = 0;
-    get_memory(&memory_total, &memory_used, &pressure);
-    get_disk(&disk_total, &disk_used);
-    double loads[3] = {0}; getloadavg(loads, 3);
+    SystemMetrics metrics = collect_system_metrics();
     char memory_used_text[24], memory_total_text[24], pressure_text[24], disk_used_text[24], disk_total_text[24], uptime[32];
-    format_bytes(memory_used, memory_used_text, sizeof(memory_used_text));
-    format_bytes(memory_total, memory_total_text, sizeof(memory_total_text));
-    format_bytes(pressure, pressure_text, sizeof(pressure_text));
-    format_bytes(disk_used, disk_used_text, sizeof(disk_used_text));
-    format_bytes(disk_total, disk_total_text, sizeof(disk_total_text));
-    format_uptime(get_uptime(), uptime, sizeof(uptime));
-    double memory_percent = memory_total ? 100.0 * (double)memory_used / memory_total : 0.0;
-    double disk_percent = disk_total ? 100.0 * (double)disk_used / disk_total : 0.0;
+    format_bytes(metrics.memory_used, memory_used_text, sizeof(memory_used_text));
+    format_bytes(metrics.memory_total, memory_total_text, sizeof(memory_total_text));
+    format_bytes(metrics.pressure, pressure_text, sizeof(pressure_text));
+    format_bytes(metrics.disk_used, disk_used_text, sizeof(disk_used_text));
+    format_bytes(metrics.disk_total, disk_total_text, sizeof(disk_total_text));
+    format_uptime(metrics.uptime, uptime, sizeof(uptime));
+    double memory_percent = metrics.memory_total ? 100.0 * (double)metrics.memory_used / metrics.memory_total : 0.0;
+    double disk_percent = metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : 0.0;
     int width = terminal_width();
     int bar_width = width >= 100 ? 28 : width >= 78 ? 18 : 10;
     bool roomy_metrics = width >= 100;
@@ -378,7 +485,7 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     printf("CPU  %5.1f%% ", cpu);
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(cpu, bar_width, color);
-    printf("  Load %.2f · %.2f · %.2f\n", loads[0], loads[1], loads[2]);
+    printf("  Load %.2f · %.2f · %.2f\n", metrics.loads[0], metrics.loads[1], metrics.loads[2]);
     if (roomy_metrics) putchar('\n');
 
     if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
@@ -395,6 +502,20 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     print_bar(disk_percent, bar_width, color);
     printf("  %s / %s  %suptime %s%s\n", disk_used_text, disk_total_text,
            color ? ANSI_DIM : "", uptime, color ? ANSI_RESET : "");
+    if (metrics.battery.available) {
+        if (roomy_metrics) putchar('\n');
+        if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
+        printf("BAT  %5d%% ", metrics.battery.percent);
+        if (color) fputs(ANSI_RESET, stdout);
+        print_bar((double)metrics.battery.percent, bar_width, color);
+        printf("  %s", metrics.battery.state);
+        if (metrics.battery.time_remaining_minutes >= 0) {
+            char battery_time[24];
+            format_duration_minutes(metrics.battery.time_remaining_minutes, battery_time, sizeof(battery_time));
+            printf(" · %s", battery_time);
+        }
+        putchar('\n');
+    }
 
     print_core_grid(core_usage, core_count, width, color);
 
