@@ -104,5 +104,4 @@ Options:
 `--json` automatically enables `--once`. In the interactive dashboard, color
 is also disabled when output is redirected or the `NO_COLOR` environment
 variable is set. `--compact` is always opt-in; the full dashboard remains the
-default. On wide, short terminals, the full dashboard places top processes
-beside the CPU-core grid and limits that list to the available height.
+default.
