@@ -83,6 +83,7 @@ Useful examples:
 ./sysview --json                 # one machine-readable report
 ./sysview --sort mem --limit 25  # biggest memory users
 ./sysview --interval 500         # refresh twice per second
+./sysview --compact              # dense dashboard for any terminal width
 ./sysview --no-color             # plain output for any terminal
 ```
 
@@ -93,6 +94,7 @@ Options:
 | `-i`, `--interval MS` | Refresh interval in milliseconds; minimum `250`, default `1000`. |
 | `-n`, `--limit COUNT` | Number of processes to show; default `12`. |
 | `-s`, `--sort FIELD` | Sort processes by `cpu`, `mem`, `pid`, or `name`; default `cpu`. |
+| `--compact` | Use a dense dashboard without usage bars or per-core meters. |
 | `--once` | Print one text report and exit. |
 | `--json` | Print one JSON report and exit; useful in scripts. |
 | `--no-color` | Disable ANSI color sequences. |
@@ -101,4 +103,5 @@ Options:
 
 `--json` automatically enables `--once`. In the interactive dashboard, color
 is also disabled when output is redirected or the `NO_COLOR` environment
-variable is set.
+variable is set. `--compact` is always opt-in; the full dashboard remains the
+default.

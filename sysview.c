@@ -91,6 +91,7 @@ typedef struct {
     int limit;
     bool once;
     bool json;
+    bool compact;
     bool no_color;
     SortMode sort;
 } Options;
@@ -117,6 +118,18 @@ static const char *format_bytes(unsigned long long bytes, char *buffer, size_t s
         unit++;
     }
     snprintf(buffer, size, unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
+    return buffer;
+}
+
+static const char *format_compact_bytes(unsigned long long bytes, char *buffer, size_t size) {
+    static const char *units[] = {"B", "K", "M", "G", "T", "P"};
+    double value = (double)bytes;
+    size_t unit = 0;
+    while (value >= 1024.0 && unit < 5) {
+        value /= 1024.0;
+        unit++;
+    }
+    snprintf(buffer, size, unit == 0 ? "%.0f%s" : "%.1f%s", value, units[unit]);
     return buffer;
 }
 
@@ -452,6 +465,83 @@ static void print_json(const Snapshot *snapshot, double cpu, const Options *opti
     puts("]}");
 }
 
+static void print_process_name(const char *name, int width) {
+    size_t length = strlen(name);
+    if (width <= 0) return;
+    if (length <= (size_t)width) {
+        fputs(name, stdout);
+    } else if (width <= 3) {
+        printf("%.*s", width, name);
+    } else {
+        printf("%.*s...", width - 3, name);
+    }
+}
+
+static void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *options,
+                                 bool clear, bool color) {
+    SystemMetrics metrics = collect_system_metrics();
+    char memory_used[16], memory_total[16], disk_used[16], disk_total[16], pressure[16], uptime[32];
+    format_compact_bytes(metrics.memory_used, memory_used, sizeof(memory_used));
+    format_compact_bytes(metrics.memory_total, memory_total, sizeof(memory_total));
+    format_compact_bytes(metrics.disk_used, disk_used, sizeof(disk_used));
+    format_compact_bytes(metrics.disk_total, disk_total, sizeof(disk_total));
+    format_compact_bytes(metrics.pressure, pressure, sizeof(pressure));
+    format_uptime(metrics.uptime, uptime, sizeof(uptime));
+    double memory_percent = metrics.memory_total ? 100.0 * (double)metrics.memory_used / metrics.memory_total : 0.0;
+    double disk_percent = metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : 0.0;
+    int width = terminal_width();
+    if (clear) fputs("\033[H\033[2J", stdout);
+
+    if (width >= 78) {
+        printf("SYSVIEW  CPU %.0f%%  MEM %s/%s  DISK %s/%s", cpu, memory_used, memory_total,
+               disk_used, disk_total);
+        if (metrics.battery.available) printf("  BAT %d%%", metrics.battery.percent);
+        putchar('\n');
+    } else if (width >= 60) {
+        printf("SYSVIEW  CPU %.0f%%  MEM %s/%s  DISK %s/%s", cpu, memory_used, memory_total,
+               disk_used, disk_total);
+        if (metrics.battery.available && width >= 70) printf("  BAT %d%%", metrics.battery.percent);
+        putchar('\n');
+    } else {
+        printf("SYSVIEW  CPU %.0f%%  MEM %.0f%%  DISK %.0f%%", cpu, memory_percent, disk_percent);
+        if (metrics.battery.available) printf("  BAT %d%%", metrics.battery.percent);
+        putchar('\n');
+    }
+
+    printf("load %.2f · %.2f · %.2f", metrics.loads[0], metrics.loads[1], metrics.loads[2]);
+    if (width >= 60) printf("  · up %s", uptime);
+    if (width >= 78) printf("  · pressure %s", pressure);
+    putchar('\n');
+
+    bool show_memory = width >= 60;
+    if (color) fputs(ANSI_BOLD, stdout);
+    if (show_memory) printf("  %-5s  %5s  %6s  %s\n", "PID", "CPU%", "MEM", "PROCESS");
+    else printf("  %-5s  %5s  %s\n", "PID", "CPU%", "PROCESS");
+    if (color) fputs(ANSI_RESET, stdout);
+    size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
+    int name_width = width - (show_memory ? 24 : 17);
+    if (name_width < 1) name_width = 1;
+    for (size_t i = 0; i < count; i++) {
+        const Process *process = &snapshot->processes.items[i];
+        const char *process_color = process->cpu_percent >= 70.0 ? ANSI_RED :
+                                    process->cpu_percent >= 25.0 ? ANSI_AMBER : ANSI_RESET;
+        printf("  %-5d  ", process->pid);
+        if (color) fputs(process_color, stdout);
+        printf("%5.1f", process->cpu_percent);
+        if (color) fputs(ANSI_RESET, stdout);
+        if (show_memory) {
+            char resident[16];
+            format_compact_bytes(process->resident, resident, sizeof(resident));
+            printf("  %6s  ", resident);
+        } else {
+            fputs("  ", stdout);
+        }
+        print_process_name(process->name, name_width);
+        putchar('\n');
+    }
+    fflush(stdout);
+}
+
 static void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
                          const double *core_usage, size_t core_count,
                          bool clear, bool color) {
@@ -552,6 +642,7 @@ static void print_usage(FILE *stream) {
         "  -i, --interval MS    Refresh interval (minimum %d; default 1000)\n"
         "  -n, --limit COUNT    Number of processes to display (default %d)\n"
         "  -s, --sort FIELD     Sort by cpu, mem, pid, or name (default cpu)\n"
+        "      --compact        Use a dense live dashboard\n"
         "      --once           Print one report and exit\n"
         "      --json           Emit one JSON report and exit\n"
         "      --no-color       Disable terminal color\n"
@@ -576,6 +667,7 @@ static int parse_args(int argc, char **argv, Options *options) {
         if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("sysview " VERSION); exit(0); }
         if (!strcmp(arg, "--once")) { options->once = true; continue; }
         if (!strcmp(arg, "--json")) { options->json = true; options->once = true; continue; }
+        if (!strcmp(arg, "--compact")) { options->compact = true; continue; }
         if (!strcmp(arg, "--no-color")) { options->no_color = true; continue; }
         if (!strcmp(arg, "-i") || !strcmp(arg, "--interval")) {
             if (++i >= argc || !parse_positive(argv[i], MIN_INTERVAL_MS, &options->interval_ms)) return -1;
@@ -630,6 +722,7 @@ int main(int argc, char **argv) {
             core_usage[i] = cpu_usage(&previous.core_ticks[i], &current.core_ticks[i]);
         }
         if (options.json) print_json(&current, cpu, &options);
+        else if (options.compact) print_compact_screen(&current, cpu, &options, interactive, color);
         else print_screen(&current, cpu, &options, core_usage, core_count, interactive, color);
         free_snapshot(&previous);
         previous = current;
