@@ -93,6 +93,9 @@ Useful examples:
 ./loutre-view --interval 500         # refresh twice per second
 ./loutre-view --compact              # dense dashboard for any terminal width
 ./loutre-view --no-color             # plain output for any terminal
+loutre-view startup --no-color       # inspect launch agents, daemons, and login items
+loutre-view startup --json           # machine-readable startup inventory
+loutre-view startup --once           # static one-shot startup report
 ```
 
 Options:
@@ -114,6 +117,13 @@ is also disabled when output is redirected or the `NO_COLOR` environment
 variable is set. `--compact` is always opt-in; the full dashboard remains the
 default. On wide, short terminals, the full dashboard places top processes
 beside the CPU-core grid and limits that list to the available height.
+
+The `startup` command lists configured launch agents, launch daemons, and
+session login items. It reports whether each item is running, its live CPU and
+memory cost when a process can be matched, the last observed start time, path,
+and owner. Missing executable paths and configured-but-inactive entries are
+shown explicitly, including last observed start time; use `--once` for a
+static report or `--json` for automation.
 
 The interactive Networks view shows each interface's status, current receive
 and transmit rate, and cumulative receive/transmit totals.

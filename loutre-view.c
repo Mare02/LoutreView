@@ -1,4 +1,9 @@
 #include <errno.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#include <CoreServices/CoreServices.h>
+#pragma clang diagnostic pop
+#include <dirent.h>
 #include <IOKit/ps/IOPowerSources.h>
 #include <IOKit/ps/IOPSKeys.h>
 #include <libproc.h>
@@ -14,11 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/proc_info.h>
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <termios.h>
+#include <pwd.h>
 #include <unistd.h>
 
 #define VERSION "1.0.0"
@@ -55,11 +63,13 @@ typedef struct {
 typedef struct {
     pid_t pid;
     char name[PROC_PIDPATHINFO_MAXSIZE];
+    char path[PROC_PIDPATHINFO_MAXSIZE];
     unsigned long long resident;
     unsigned long long virtual_size;
     unsigned long long cpu_time;
     int threads;
     double cpu_percent;
+    time_t start_time;
 } Process;
 
 typedef struct {
@@ -116,8 +126,29 @@ typedef struct {
     bool json;
     bool compact;
     bool no_color;
+    bool startup;
     SortMode sort;
 } Options;
+
+typedef enum { STARTUP_AGENT, STARTUP_DAEMON, STARTUP_LOGIN_ITEM } StartupKind;
+
+typedef struct {
+    StartupKind kind;
+    char name[256];
+    char path[PROC_PIDPATHINFO_MAXSIZE];
+    char owner[64];
+    pid_t pid;
+    unsigned long long resident;
+    double cpu_percent;
+    time_t start_time;
+    bool path_missing;
+} StartupItem;
+
+typedef struct {
+    StartupItem *items;
+    size_t count;
+    size_t capacity;
+} StartupList;
 
 static volatile sig_atomic_t running = 1;
 static struct termios original_terminal;
@@ -637,6 +668,13 @@ static ProcessList collect_processes(const Snapshot *previous, double elapsed) {
         if (proc_name(pids[i], process->name, sizeof(process->name)) <= 0) {
             snprintf(process->name, sizeof(process->name), "<unknown>");
         }
+        if (proc_pidpath(pids[i], process->path, sizeof(process->path)) <= 0) {
+            process->path[0] = '\0';
+        }
+        struct proc_bsdinfo bsd = {0};
+        if (proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &bsd, sizeof(bsd)) == sizeof(bsd)) {
+            process->start_time = (time_t)bsd.pbi_start_tvsec;
+        }
         if (previous && elapsed > 0) {
             for (size_t j = 0; j < previous->processes.count; j++) {
                 const Process *old = &previous->processes.items[j];
@@ -1068,9 +1106,353 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     fflush(stdout);
 }
 
+static const char *startup_kind_name(StartupKind kind) {
+    if (kind == STARTUP_AGENT) return "launch agent";
+    if (kind == STARTUP_DAEMON) return "launch daemon";
+    return "login item";
+}
+
+static const char *startup_kind_short_name(StartupKind kind) {
+    if (kind == STARTUP_AGENT) return "agent";
+    if (kind == STARTUP_DAEMON) return "daemon";
+    return "login";
+}
+
+static void print_startup_clamped(const char *value, int width) {
+    if (width <= 0) return;
+    size_t length = strlen(value);
+    if ((int)length <= width) {
+        fputs(value, stdout);
+    } else if (width <= 3) {
+        fwrite(value, 1, (size_t)width, stdout);
+    } else {
+        fwrite(value, 1, (size_t)(width - 3), stdout);
+        fputs("...", stdout);
+    }
+}
+
+static void print_startup_cell(const char *value, int width) {
+    if (width <= 0) return;
+    print_startup_clamped(value, width);
+    int padding = width - (int)strlen(value);
+    if (padding < 0) padding = 0;
+    if ((int)strlen(value) > width && width > 3) padding = 0;
+    print_spaces(padding);
+}
+
+static const char *path_leaf(const char *path) {
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+static bool path_contains_bundle(const char *bundle, const char *process_path) {
+    size_t length = strlen(bundle);
+    return length > 4 && strcmp(bundle + length - 4, ".app") == 0 &&
+           strncmp(bundle, process_path, length) == 0 && process_path[length] == '/';
+}
+
+static void startup_owner(const char *path, char *owner, size_t size) {
+    struct stat info;
+    if (path && *path && stat(path, &info) == 0) {
+        struct passwd *password = getpwuid(info.st_uid);
+        if (password) {
+            snprintf(owner, size, "%s", password->pw_name);
+            return;
+        }
+        snprintf(owner, size, "%u", info.st_uid);
+        return;
+    }
+    snprintf(owner, size, "unknown");
+}
+
+static void cf_string_copy(CFTypeRef value, char *out, size_t size) {
+    out[0] = '\0';
+    if (!value || CFGetTypeID(value) != CFStringGetTypeID()) return;
+    CFStringGetCString((CFStringRef)value, out, size, kCFStringEncodingUTF8);
+}
+
+static bool startup_add(StartupList *list, StartupKind kind, const char *name,
+                        const char *path, const char *owner) {
+    if (list->count == list->capacity) {
+        size_t capacity = list->capacity ? list->capacity * 2 : 256;
+        StartupItem *items = realloc(list->items, capacity * sizeof(*items));
+        if (!items) return false;
+        list->items = items;
+        list->capacity = capacity;
+    }
+    StartupItem *item = &list->items[list->count++];
+    *item = (StartupItem){ .kind = kind, .pid = 0 };
+    snprintf(item->name, sizeof(item->name), "%s", name && *name ? name : "(unnamed)");
+    snprintf(item->path, sizeof(item->path), "%s", path ? path : "");
+    if (owner && *owner) snprintf(item->owner, sizeof(item->owner), "%s", owner);
+    else startup_owner(item->path, item->owner, sizeof(item->owner));
+    item->path_missing = item->path[0] == '\0' || access(item->path, F_OK) != 0;
+    return true;
+}
+
+static void launchctl_statuses(StartupList *list, const char *domain) {
+    char command[128];
+    snprintf(command, sizeof(command), "launchctl list%s 2>/dev/null", domain ? " system" : "");
+    FILE *stream = popen(command, "r");
+    if (!stream) return;
+    char line[512];
+    while (fgets(line, sizeof(line), stream)) {
+        int pid = 0, status = 0;
+        char label[256];
+        if (sscanf(line, "%d %d %255s", &pid, &status, label) != 3) continue;
+        (void)status;
+        for (size_t i = 0; i < list->count; i++) {
+            StartupItem *item = &list->items[i];
+            if (item->kind == STARTUP_LOGIN_ITEM || strcmp(item->name, label) != 0) continue;
+            item->pid = (pid > 0) ? (pid_t)pid : 0;
+            break;
+        }
+    }
+    pclose(stream);
+}
+
+static void launch_plist(StartupList *list, StartupKind kind, const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return;
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return; }
+    long length = ftell(file);
+    if (length <= 0 || length > 16 * 1024 * 1024 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return;
+    }
+    UInt8 *data = malloc((size_t)length);
+    if (!data || fread(data, 1, (size_t)length, file) != (size_t)length) {
+        free(data); fclose(file); return;
+    }
+    fclose(file);
+    CFDataRef cf_data = CFDataCreate(kCFAllocatorDefault, data, (CFIndex)length);
+    free(data);
+    if (!cf_data) return;
+    CFPropertyListRef plist = CFPropertyListCreateWithData(kCFAllocatorDefault, cf_data,
+                                                            kCFPropertyListImmutable, NULL, NULL);
+    CFRelease(cf_data);
+    if (!plist || CFGetTypeID(plist) != CFDictionaryGetTypeID()) {
+        if (plist) CFRelease(plist);
+        return;
+    }
+
+    CFDictionaryRef dict = (CFDictionaryRef)plist;
+    char name[256] = {0};
+    cf_string_copy(CFDictionaryGetValue(dict, CFSTR("Label")), name, sizeof(name));
+    if (!name[0]) snprintf(name, sizeof(name), "%s", path_leaf(path));
+    char executable[PROC_PIDPATHINFO_MAXSIZE] = {0};
+    cf_string_copy(CFDictionaryGetValue(dict, CFSTR("Program")), executable, sizeof(executable));
+    if (!executable[0]) {
+        CFArrayRef arguments = (CFArrayRef)CFDictionaryGetValue(dict, CFSTR("ProgramArguments"));
+        if (arguments && CFGetTypeID(arguments) == CFArrayGetTypeID() && CFArrayGetCount(arguments) > 0) {
+            cf_string_copy(CFArrayGetValueAtIndex(arguments, 0), executable, sizeof(executable));
+        }
+    }
+    char owner[64];
+    startup_owner(executable[0] ? executable : path, owner, sizeof(owner));
+    startup_add(list, kind, name, executable, owner);
+    CFRelease(plist);
+}
+
+static void collect_launch_plists(StartupList *list, StartupKind kind, const char *directory) {
+    DIR *dir = opendir(directory);
+    if (!dir) return;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        size_t length = strlen(entry->d_name);
+        if (length < 6 || strcmp(entry->d_name + length - 6, ".plist") != 0) continue;
+        char path[PROC_PIDPATHINFO_MAXSIZE];
+        snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
+        launch_plist(list, kind, path);
+    }
+    closedir(dir);
+}
+
+static void collect_login_items(StartupList *list) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    LSSharedFileListRef shared = LSSharedFileListCreate(kCFAllocatorDefault,
+                                                         kLSSharedFileListSessionLoginItems, NULL);
+    if (!shared) return;
+    UInt32 seed = 0;
+    CFArrayRef snapshot = LSSharedFileListCopySnapshot(shared, &seed);
+    if (!snapshot) { CFRelease(shared); return; }
+    for (CFIndex i = 0; i < CFArrayGetCount(snapshot); i++) {
+        LSSharedFileListItemRef item = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(snapshot, i);
+        CFURLRef url = NULL;
+        if (LSSharedFileListItemResolve(item, 0, &url, NULL) != noErr || !url) continue;
+        char path[PROC_PIDPATHINFO_MAXSIZE] = {0};
+        char name[256] = {0};
+        CFURLGetFileSystemRepresentation(url, true, (UInt8 *)path, sizeof(path));
+        CFStringRef last = CFURLCopyLastPathComponent(url);
+        cf_string_copy(last, name, sizeof(name));
+        if (last) CFRelease(last);
+        startup_add(list, STARTUP_LOGIN_ITEM, name[0] ? name : path_leaf(path), path, NULL);
+        CFRelease(url);
+    }
+    CFRelease(snapshot);
+    CFRelease(shared);
+#pragma clang diagnostic pop
+}
+
+static void startup_match_processes(StartupList *list, const ProcessList *processes) {
+    for (size_t i = 0; i < list->count; i++) {
+        StartupItem *item = &list->items[i];
+        for (size_t j = 0; j < processes->count; j++) {
+            const Process *process = &processes->items[j];
+            bool same = item->pid > 0 && item->pid == process->pid;
+            if (!same && item->path[0] && process->path[0]) same = strcmp(item->path, process->path) == 0;
+            if (!same && item->kind == STARTUP_LOGIN_ITEM && item->path[0] && process->path[0]) {
+                same = path_contains_bundle(item->path, process->path);
+            }
+            if (!same && item->kind == STARTUP_LOGIN_ITEM) {
+                same = strcasecmp(item->name, process->name) == 0 ||
+                       strcasecmp(path_leaf(item->path), process->name) == 0;
+            }
+            if (!same) continue;
+            item->pid = process->pid;
+            item->resident = process->resident;
+            item->cpu_percent = process->cpu_percent;
+            item->start_time = process->start_time;
+            break;
+        }
+    }
+}
+
+static int compare_startup_items(const void *left_value, const void *right_value) {
+    const StartupItem *left = left_value, *right = right_value;
+    if (left->kind != right->kind) return (int)left->kind - (int)right->kind;
+    return strcasecmp(left->name, right->name);
+}
+
+static void format_start_time(time_t value, char *buffer, size_t size) {
+    if (!value) { snprintf(buffer, size, "-"); return; }
+    struct tm local;
+    if (!localtime_r(&value, &local) || strftime(buffer, size, "%Y-%m-%d %H:%M", &local) == 0) {
+        snprintf(buffer, size, "unknown");
+    }
+}
+
+static void print_startup_json(const StartupList *list) {
+    putchar('{');
+    fputs("\"items\":[", stdout);
+    for (size_t i = 0; i < list->count; i++) {
+        const StartupItem *item = &list->items[i];
+        if (i) putchar(',');
+        printf("{\"name\":"); json_string(item->name);
+        printf(",\"kind\":"); json_string(startup_kind_name(item->kind));
+        printf(",\"pid\":%d,\"running\":%s,\"memory_bytes\":%llu,\"cpu_percent\":%.1f,\"path\":",
+               item->pid, item->pid > 0 ? "true" : "false", item->resident, item->cpu_percent);
+        json_string(item->path);
+        printf(",\"owner\":"); json_string(item->owner);
+        printf(",\"path_missing\":%s,\"last_start\":", item->path_missing ? "true" : "false");
+        char start[32]; format_start_time(item->start_time, start, sizeof(start));
+        if (item->start_time) json_string(start); else fputs("null", stdout);
+        putchar('}');
+    }
+    fputs("]}\n", stdout);
+}
+
+static void print_startup_report(const Options *options) {
+    StartupList list = {0};
+    const char *home = getenv("HOME");
+    char user_agents[PROC_PIDPATHINFO_MAXSIZE];
+    if (home) {
+        snprintf(user_agents, sizeof(user_agents), "%s/Library/LaunchAgents", home);
+        collect_launch_plists(&list, STARTUP_AGENT, user_agents);
+    }
+    collect_launch_plists(&list, STARTUP_AGENT, "/Library/LaunchAgents");
+    collect_launch_plists(&list, STARTUP_AGENT, "/System/Library/LaunchAgents");
+    collect_launch_plists(&list, STARTUP_DAEMON, "/Library/LaunchDaemons");
+    collect_launch_plists(&list, STARTUP_DAEMON, "/System/Library/LaunchDaemons");
+    collect_login_items(&list);
+    launchctl_statuses(&list, NULL);
+    launchctl_statuses(&list, "system");
+
+    Snapshot previous = {0}, current = {0};
+    previous.processes = collect_processes(NULL, 0);
+    usleep(100000);
+    current.processes = collect_processes(&previous, 0.1);
+    startup_match_processes(&list, &current.processes);
+    free_snapshot(&previous);
+    free_snapshot(&current);
+    qsort(list.items, list.count, sizeof(list.items[0]), compare_startup_items);
+    if (options->json) {
+        print_startup_json(&list);
+        free(list.items);
+        return;
+    }
+
+    bool color = !options->no_color && isatty(STDOUT_FILENO) && getenv("NO_COLOR") == NULL;
+    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    printf("LOUTREVIEW  /  STARTUP\n");
+    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
+    printf("%zu configured items\n\n", list.count);
+    int width = terminal_width();
+    int name_width = width >= 120 ? 28 : width >= 90 ? 22 : 16;
+    int type_width = 8;
+    int status_width = 12;
+    int memory_width = 8;
+    int cpu_width = 7;
+    int start_width = 17;
+    int owner_width = width >= 90 ? 8 : 7;
+
+    if (color) fputs(ANSI_BOLD, stdout);
+    fputs("  ", stdout);
+    print_startup_cell("NAME", name_width);
+    fputs("  ", stdout);
+    print_startup_cell("TYPE", type_width);
+    fputs("  ", stdout);
+    print_startup_cell("STATUS", status_width);
+    fputs("  ", stdout);
+    print_startup_cell("MEM", memory_width);
+    fputs("  ", stdout);
+    print_startup_cell("CPU", cpu_width);
+    fputs("  ", stdout);
+    print_startup_cell("LAST START", start_width);
+    fputs("  ", stdout);
+    print_startup_cell("OWNER", owner_width);
+    fputs(" PATH\n", stdout);
+    putchar('\n');
+    if (color) fputs(ANSI_RESET, stdout);
+    for (size_t i = 0; i < list.count; i++) {
+        const StartupItem *item = &list.items[i];
+        char memory[16];
+        format_bytes(item->resident, memory, sizeof(memory));
+        const char *status = item->path_missing ? "path missing" : item->pid > 0 ? "running" : "inactive";
+        const char *status_style = item->path_missing ? ANSI_RED : item->pid > 0 ? ANSI_GREEN : ANSI_AMBER;
+        const char *path = item->path[0] ? item->path : "-";
+        char start[32];
+        format_start_time(item->start_time, start, sizeof(start));
+        printf("  ");
+        print_startup_cell(item->name, name_width);
+        fputs("  ", stdout);
+        print_startup_cell(startup_kind_short_name(item->kind), type_width);
+        fputs("  ", stdout);
+        if (color) fputs(status_style, stdout);
+        print_startup_cell(status, status_width);
+        if (color) fputs(ANSI_RESET, stdout);
+        fputs("  ", stdout);
+        print_startup_cell(memory, memory_width);
+        fputs("  ", stdout);
+        char cpu[16];
+        snprintf(cpu, sizeof(cpu), "%.1f%%", item->cpu_percent);
+        print_startup_cell(cpu, cpu_width);
+        fputs("  ", stdout);
+        print_startup_cell(start, start_width);
+        fputs("  ", stdout);
+        print_startup_cell(item->owner, owner_width);
+        fputs(" ", stdout);
+        fputs(path, stdout);
+        putchar('\n');
+        putchar('\n');
+    }
+    free(list.items);
+}
+
 static void print_usage(FILE *stream) {
     fprintf(stream,
-        "Usage: loutre-view [options]\n\n"
+        "Usage: loutre-view [startup] [options]\n\n"
         "Native macOS resource and process monitor.\n\n"
         "Options:\n"
         "  -i, --interval MS    Refresh interval (minimum %d; default 1000)\n"
@@ -1080,6 +1462,8 @@ static void print_usage(FILE *stream) {
         "      --once           Print one report and exit\n"
         "      --json           Emit one JSON report and exit\n"
         "      --no-color       Disable terminal color\n"
+        "\nCommands:\n"
+        "  startup              Inspect launch agents, daemons, and login items\n"
         "  -h, --help           Show this help\n"
         "  -v, --version        Show version\n", MIN_INTERVAL_MS, DEFAULT_LIMIT);
 }
@@ -1097,6 +1481,7 @@ static int parse_args(int argc, char **argv, Options *options) {
     *options = (Options){ .interval_ms = 1000, .limit = DEFAULT_LIMIT, .sort = SORT_CPU };
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
+        if (!strcmp(arg, "startup")) { options->startup = true; continue; }
         if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) { print_usage(stdout); exit(0); }
         if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("loutre-view " VERSION); exit(0); }
         if (!strcmp(arg, "--once")) { options->once = true; continue; }
@@ -1129,6 +1514,10 @@ int main(int argc, char **argv) {
     Options options;
     if (parse_args(argc, argv, &options) != 0) { print_usage(stderr); return 2; }
     signal(SIGINT, on_signal); signal(SIGTERM, on_signal);
+    if (options.startup) {
+        print_startup_report(&options);
+        return 0;
+    }
 
     Snapshot previous = {0};
     read_cpu_ticks(&previous.ticks, previous.core_ticks, &previous.core_count);
