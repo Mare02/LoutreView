@@ -40,7 +40,10 @@
 #define ANSI_MAIN_SCREEN "\033[?1049l"
 #define ANSI_HIDE_CURSOR "\033[?25l"
 #define ANSI_SHOW_CURSOR "\033[?25h"
+#define ANSI_HOME "\033[H"
 #define ANSI_CLEAR_SCREEN "\033[2J\033[3J\033[H"
+#define ANSI_SYNC_BEGIN "\033[?2026h"
+#define ANSI_SYNC_END "\033[?2026l"
 
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
 typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS } View;
@@ -1145,6 +1148,7 @@ int main(int argc, char **argv) {
     View view = VIEW_DASHBOARD;
     NetworkSnapshot previous_networks = {0};
     bool have_previous_networks = false;
+    bool clear_screen = interactive;
     while (running) {
         Snapshot current = {0};
         read_cpu_ticks(&current.ticks, current.core_ticks, &current.core_count);
@@ -1164,12 +1168,28 @@ int main(int argc, char **argv) {
                                         elapsed);
         }
         if (options.json) print_json(&current, cpu, &options);
-        else if (view == VIEW_NETWORKS && options.compact) {
-            print_compact_network_screen(&networks, interactive, color);
+        else {
+            if (interactive) {
+                fputs(ANSI_SYNC_BEGIN, stdout);
+                fputs(clear_screen ? ANSI_CLEAR_SCREEN : ANSI_HOME, stdout);
+            }
+            if (view == VIEW_NETWORKS && options.compact) {
+                print_compact_network_screen(&networks, clear_screen, color);
+            }
+            else if (view == VIEW_NETWORKS) {
+                print_network_screen(&networks, &options, clear_screen, color);
+            }
+            else if (options.compact) {
+                print_compact_screen(&current, cpu, &options, clear_screen, color);
+            }
+            else {
+                print_screen(&current, cpu, &options, core_usage, core_count, clear_screen, color);
+            }
+            if (interactive) {
+                fputs(ANSI_SYNC_END, stdout);
+                fflush(stdout);
+            }
         }
-        else if (view == VIEW_NETWORKS) print_network_screen(&networks, &options, interactive, color);
-        else if (options.compact) print_compact_screen(&current, cpu, &options, interactive, color);
-        else print_screen(&current, cpu, &options, core_usage, core_count, interactive, color);
         free_snapshot(&previous);
         previous = current;
         if (view == VIEW_NETWORKS) {
@@ -1181,7 +1201,9 @@ int main(int argc, char **argv) {
         }
         if (options.once) break;
         if (interactive) {
+            View old_view = view;
             if (!wait_for_input(&view, options.interval_ms)) break;
+            clear_screen = view != old_view;
         }
         else {
             struct timespec delay = { .tv_sec = options.interval_ms / 1000,
