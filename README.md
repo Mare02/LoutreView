@@ -1,4 +1,10 @@
-# LoutreView
+<p align="center">
+  <img src="assets/loutre-view-logo-transparent.png" alt="LoutreView logo" width="180">
+</p>
+
+<h1 align="center">LoutreView</h1>
+
+<p align="center">A fast, native macOS terminal monitor.</p>
 
 `loutre-view` is a fast, native macOS terminal monitor written in C. Its live dashboard includes color-coded usage bars, CPU and memory signal traces, load averages, memory pressure, disk use, battery status on portable Macs, uptime, and active processes. It calls macOS system APIs directly—there is no Node, Python, package manager, or runtime dependency.
 
