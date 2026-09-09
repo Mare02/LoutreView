@@ -40,8 +40,7 @@
 #define ANSI_MAIN_SCREEN "\033[?1049l"
 #define ANSI_HIDE_CURSOR "\033[?25l"
 #define ANSI_SHOW_CURSOR "\033[?25h"
-#define ANSI_MOUSE_ON "\033[?1000h\033[?1006h"
-#define ANSI_MOUSE_OFF "\033[?1006l\033[?1000l"
+#define ANSI_CLEAR_SCREEN "\033[2J\033[3J\033[H"
 
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
 typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS } View;
@@ -374,7 +373,7 @@ static NetworkSnapshot collect_networks(const NetworkSnapshot *previous, double 
 
 static void print_view_header(const char *view_name, int interval_ms, int width, bool color) {
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
-    fputs("SYSVIEW", stdout);
+    fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 80) {
         printf("  /  %s\n", view_name);
@@ -393,7 +392,7 @@ static void print_view_header(const char *view_name, int interval_ms, int width,
 
 static void print_compact_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
-    fputs("SYSVIEW", stdout);
+    fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 70) {
         printf("  /  %s\n", view_name);
@@ -433,7 +432,7 @@ static void print_network_screen(const NetworkSnapshot *snapshot, const Options 
     char receive_total[16], transmit_total[16];
     format_compact_bytes((unsigned long long)receive_rate, receive_total, sizeof(receive_total));
     format_compact_bytes((unsigned long long)transmit_rate, transmit_total, sizeof(transmit_total));
-    if (clear) fputs("\033[H\033[2J", stdout);
+    if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
     print_view_header("NETWORKS", options->interval_ms, width, color);
 
     if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
@@ -497,7 +496,7 @@ static void print_compact_network_screen(const NetworkSnapshot *snapshot, bool c
     char receive_total[16], transmit_total[16];
     format_compact_bytes((unsigned long long)receive_rate, receive_total, sizeof(receive_total));
     format_compact_bytes((unsigned long long)transmit_rate, transmit_total, sizeof(transmit_total));
-    if (clear) fputs("\033[H\033[2J", stdout);
+    if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
     print_compact_header("NETWORKS", width, color);
     if (color) fputs(ANSI_DIM, stdout);
@@ -543,30 +542,54 @@ static void print_compact_network_screen(const NetworkSnapshot *snapshot, bool c
     fflush(stdout);
 }
 
-static View handle_input(View current) {
+static bool handle_input(View *current) {
     unsigned char input[32];
     ssize_t received = read(STDIN_FILENO, input, sizeof(input));
-    if (received <= 0) return current;
+    if (received <= 0) return false;
+    static int escape_state = 0;
+    bool changed = false;
     for (ssize_t i = 0; i < received; i++) {
+        if (escape_state == 1) {
+            escape_state = input[i] == '[' ? 2 : 0;
+            continue;
+        }
+        if (escape_state == 2) {
+            if (input[i] >= 0x40 && input[i] <= 0x7e) escape_state = 0;
+            continue;
+        }
+        if (input[i] == '\033') {
+            escape_state = 1;
+            continue;
+        }
+        View next = *current;
         if (input[i] == '1') {
-            current = VIEW_DASHBOARD;
+            next = VIEW_DASHBOARD;
         } else if (input[i] == '2' || input[i] == 'n' || input[i] == 'N') {
-            current = VIEW_NETWORKS;
+            next = VIEW_NETWORKS;
         } else if (input[i] == '\t') {
-            current = current == VIEW_DASHBOARD ? VIEW_NETWORKS : VIEW_DASHBOARD;
+            next = *current == VIEW_DASHBOARD ? VIEW_NETWORKS : VIEW_DASHBOARD;
+        }
+        if (next != *current) {
+            *current = next;
+            changed = true;
         }
     }
-    return current;
+    return changed;
 }
 
-static View wait_for_input(View current, int timeout_ms) {
-    struct pollfd descriptor = { .fd = STDIN_FILENO, .events = POLLIN };
-    int result;
-    do {
-        result = poll(&descriptor, 1, timeout_ms);
-    } while (result < 0 && errno == EINTR && running);
-    if (result > 0 && (descriptor.revents & POLLIN)) return handle_input(current);
-    return current;
+static bool wait_for_input(View *current, int timeout_ms) {
+    for (;;) {
+        struct pollfd descriptor = { .fd = STDIN_FILENO, .events = POLLIN };
+        int result;
+        do {
+            result = poll(&descriptor, 1, timeout_ms);
+        } while (result < 0 && errno == EINTR && running);
+
+        if (result == 0) return true;
+        if (result < 0 || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))) return false;
+        if ((descriptor.revents & POLLIN) && handle_input(current)) return true;
+        /* Ignore scroll sequences and other input that does not change view. */
+    }
 }
 
 static SystemMetrics collect_system_metrics(void) {
@@ -861,7 +884,7 @@ static void print_compact_screen(const Snapshot *snapshot, double cpu, const Opt
     double memory_percent = metrics.memory_total ? 100.0 * (double)metrics.memory_used / metrics.memory_total : 0.0;
     double disk_percent = metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : 0.0;
     int width = terminal_width();
-    if (clear) fputs("\033[H\033[2J", stdout);
+    if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
     print_compact_header("DASHBOARD", width, color);
 
@@ -957,7 +980,7 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     int width = terminal_width();
     int height = terminal_height();
     int bar_width = width >= 100 ? 28 : width >= 78 ? 18 : 10;
-    if (clear) fputs("\033[H\033[2J", stdout);
+    if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
     print_view_header("DASHBOARD", options->interval_ms, width, color);
 
@@ -1044,7 +1067,7 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
 
 static void print_usage(FILE *stream) {
     fprintf(stream,
-        "Usage: sysview [options]\n\n"
+        "Usage: loutre-view [options]\n\n"
         "Native macOS resource and process monitor.\n\n"
         "Options:\n"
         "  -i, --interval MS    Refresh interval (minimum %d; default 1000)\n"
@@ -1072,7 +1095,7 @@ static int parse_args(int argc, char **argv, Options *options) {
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) { print_usage(stdout); exit(0); }
-        if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("sysview " VERSION); exit(0); }
+        if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("loutre-view " VERSION); exit(0); }
         if (!strcmp(arg, "--once")) { options->once = true; continue; }
         if (!strcmp(arg, "--json")) { options->json = true; options->once = true; continue; }
         if (!strcmp(arg, "--compact")) { options->compact = true; continue; }
@@ -1114,7 +1137,9 @@ int main(int argc, char **argv) {
     bool color = interactive && !options.no_color && getenv("NO_COLOR") == NULL;
     if (interactive) {
         configure_terminal();
-        fputs(ANSI_ALT_SCREEN ANSI_HIDE_CURSOR ANSI_MOUSE_ON, stdout);
+        /* Keep mouse input with the terminal so wheel scrolling does not
+           wake the render loop and append another dashboard frame. */
+        fputs(ANSI_ALT_SCREEN ANSI_HIDE_CURSOR, stdout);
         fflush(stdout);
     }
     View view = VIEW_DASHBOARD;
@@ -1133,8 +1158,11 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < core_count; i++) {
             core_usage[i] = cpu_usage(&previous.core_ticks[i], &current.core_ticks[i]);
         }
-        NetworkSnapshot networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
-                                                    elapsed);
+        NetworkSnapshot networks = {0};
+        if (view == VIEW_NETWORKS) {
+            networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
+                                        elapsed);
+        }
         if (options.json) print_json(&current, cpu, &options);
         else if (view == VIEW_NETWORKS && options.compact) {
             print_compact_network_screen(&networks, interactive, color);
@@ -1144,10 +1172,17 @@ int main(int argc, char **argv) {
         else print_screen(&current, cpu, &options, core_usage, core_count, interactive, color);
         free_snapshot(&previous);
         previous = current;
-        previous_networks = networks;
-        have_previous_networks = true;
+        if (view == VIEW_NETWORKS) {
+            previous_networks = networks;
+            have_previous_networks = true;
+        } else {
+            previous_networks = (NetworkSnapshot){0};
+            have_previous_networks = false;
+        }
         if (options.once) break;
-        if (interactive) view = wait_for_input(view, options.interval_ms);
+        if (interactive) {
+            if (!wait_for_input(&view, options.interval_ms)) break;
+        }
         else {
             struct timespec delay = { .tv_sec = options.interval_ms / 1000,
                                       .tv_nsec = (long)(options.interval_ms % 1000) * 1000000L };
@@ -1156,7 +1191,7 @@ int main(int argc, char **argv) {
     }
     free_snapshot(&previous);
     if (interactive) {
-        fputs(ANSI_RESET ANSI_MOUSE_OFF ANSI_SHOW_CURSOR ANSI_MAIN_SCREEN, stdout);
+        fputs(ANSI_RESET ANSI_SHOW_CURSOR ANSI_MAIN_SCREEN, stdout);
         fflush(stdout);
         restore_terminal();
     }

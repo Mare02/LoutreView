@@ -1,13 +1,13 @@
 CC := clang
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2
 LDLIBS := -framework IOKit -framework CoreFoundation
-TARGET := sysview
+TARGET := loutre-view
 
 .PHONY: all clean run
 
 all: $(TARGET)
 
-$(TARGET): sysview.c
+$(TARGET): loutre-view.c
 	$(CC) $(CFLAGS) $< -o $@ $(LDLIBS)
 
 run: $(TARGET)
