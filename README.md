@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/loutre-view-logo-transparent.png" alt="LoutreView logo" width="180">
+  <img src="assets/loutre-view-logo.png" alt="LoutreView logo" width="180">
 </p>
 
 <h1 align="center">LoutreView</h1>
