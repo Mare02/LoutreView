@@ -1149,6 +1149,8 @@ int main(int argc, char **argv) {
     NetworkSnapshot previous_networks = {0};
     bool have_previous_networks = false;
     bool clear_screen = interactive;
+    int rendered_width = 0;
+    int rendered_height = 0;
     while (running) {
         Snapshot current = {0};
         read_cpu_ticks(&current.ticks, current.core_ticks, &current.core_count);
@@ -1169,6 +1171,12 @@ int main(int argc, char **argv) {
         }
         if (options.json) print_json(&current, cpu, &options);
         else {
+            int current_width = terminal_width();
+            int current_height = terminal_height();
+            if (interactive && (current_width != rendered_width ||
+                                current_height != rendered_height)) {
+                clear_screen = true;
+            }
             if (interactive) {
                 fputs(ANSI_SYNC_BEGIN, stdout);
                 fputs(clear_screen ? ANSI_CLEAR_SCREEN : ANSI_HOME, stdout);
@@ -1188,6 +1196,8 @@ int main(int argc, char **argv) {
             if (interactive) {
                 fputs(ANSI_SYNC_END, stdout);
                 fflush(stdout);
+                rendered_width = current_width;
+                rendered_height = current_height;
             }
         }
         free_snapshot(&previous);
