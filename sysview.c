@@ -4,6 +4,10 @@
 #include <libproc.h>
 #include <mach/mach.h>
 #include <mach/mach_host.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <net/if_var.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,12 +18,14 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <time.h>
+#include <termios.h>
 #include <unistd.h>
 
 #define VERSION "1.0.0"
 #define DEFAULT_LIMIT 12
 #define MIN_INTERVAL_MS 250
 #define MAX_CPU_CORES 128
+#define MAX_NETWORK_INTERFACES 64
 
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -38,6 +44,7 @@
 #define ANSI_MOUSE_OFF "\033[?1006l\033[?1000l"
 
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
+typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS } View;
 
 typedef struct {
     unsigned long long user, system, idle, nice;
@@ -87,6 +94,20 @@ typedef struct {
 } Snapshot;
 
 typedef struct {
+    char name[IFNAMSIZ];
+    bool up;
+    unsigned long long received;
+    unsigned long long transmitted;
+    double receive_rate;
+    double transmit_rate;
+} NetworkInterface;
+
+typedef struct {
+    NetworkInterface items[MAX_NETWORK_INTERFACES];
+    size_t count;
+} NetworkSnapshot;
+
+typedef struct {
     int interval_ms;
     int limit;
     bool once;
@@ -97,10 +118,35 @@ typedef struct {
 } Options;
 
 static volatile sig_atomic_t running = 1;
+static struct termios original_terminal;
+static bool terminal_configured = false;
+
+static int terminal_width(void);
+static int terminal_height(void);
 
 static void on_signal(int signal_number) {
     (void)signal_number;
     running = 0;
+}
+
+static void restore_terminal(void) {
+    if (terminal_configured) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_terminal);
+        terminal_configured = false;
+    }
+}
+
+static bool configure_terminal(void) {
+    if (!isatty(STDIN_FILENO)) return false;
+    if (tcgetattr(STDIN_FILENO, &original_terminal) != 0) return false;
+
+    struct termios terminal = original_terminal;
+    terminal.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+    terminal.c_cc[VMIN] = 0;
+    terminal.c_cc[VTIME] = 0;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &terminal) != 0) return false;
+    terminal_configured = true;
+    return true;
 }
 
 static double now_seconds(void) {
@@ -289,6 +335,238 @@ static bool get_disk(unsigned long long *total, unsigned long long *used) {
     *total = (unsigned long long)stats.f_blocks * stats.f_bsize;
     *used = (unsigned long long)(stats.f_blocks - stats.f_bavail) * stats.f_bsize;
     return true;
+}
+
+static NetworkSnapshot collect_networks(const NetworkSnapshot *previous, double elapsed) {
+    NetworkSnapshot snapshot = {0};
+    struct ifaddrs *addresses = NULL;
+    if (getifaddrs(&addresses) != 0) return snapshot;
+
+    for (struct ifaddrs *address = addresses; address && snapshot.count < MAX_NETWORK_INTERFACES;
+         address = address->ifa_next) {
+        if (!address->ifa_name || !address->ifa_data || !address->ifa_addr ||
+            address->ifa_addr->sa_family != AF_LINK) continue;
+
+        struct if_data *data = (struct if_data *)address->ifa_data;
+        NetworkInterface *network = &snapshot.items[snapshot.count++];
+        snprintf(network->name, sizeof(network->name), "%s", address->ifa_name);
+        network->up = (address->ifa_flags & IFF_UP) != 0;
+        network->received = data->ifi_ibytes;
+        network->transmitted = data->ifi_obytes;
+
+        if (previous && elapsed > 0) {
+            for (size_t i = 0; i < previous->count; i++) {
+                const NetworkInterface *old = &previous->items[i];
+                if (strcmp(old->name, network->name) != 0) continue;
+                if (network->received >= old->received) {
+                    network->receive_rate = (double)(network->received - old->received) / elapsed;
+                }
+                if (network->transmitted >= old->transmitted) {
+                    network->transmit_rate = (double)(network->transmitted - old->transmitted) / elapsed;
+                }
+                break;
+            }
+        }
+    }
+    freeifaddrs(addresses);
+    return snapshot;
+}
+
+static void print_view_header(const char *view_name, int interval_ms, int width, bool color) {
+    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    fputs("SYSVIEW", stdout);
+    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
+    if (width < 80) {
+        printf("  /  %s\n", view_name);
+        if (color) fputs(ANSI_DIM, stdout);
+        printf("1:dashboard · 2:networks   refresh %dms\n", interval_ms);
+        if (color) fputs(ANSI_RESET, stdout);
+    } else {
+        printf("  /  %s   1:dashboard · 2:networks   refresh %dms\n",
+               view_name, interval_ms);
+    }
+    if (color) fputs(ANSI_SLATE, stdout);
+    for (int i = 0; i < width - 1; i++) fputs("─", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+    putchar('\n');
+}
+
+static void print_compact_header(const char *view_name, int width, bool color) {
+    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    fputs("SYSVIEW", stdout);
+    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
+    if (width < 70) {
+        printf("  /  %s\n", view_name);
+        if (color) fputs(ANSI_DIM, stdout);
+        fputs("1:dashboard · 2:networks\n", stdout);
+        if (color) fputs(ANSI_RESET, stdout);
+    } else {
+        printf("  /  %s   1:dashboard · 2:networks\n", view_name);
+    }
+}
+
+static int compare_network_usage(const void *left_value, const void *right_value) {
+    const NetworkInterface *left = left_value;
+    const NetworkInterface *right = right_value;
+    if (left->up != right->up) return right->up - left->up;
+
+    double left_rate = left->receive_rate + left->transmit_rate;
+    double right_rate = right->receive_rate + right->transmit_rate;
+    if (left_rate != right_rate) return right_rate > left_rate ? 1 : -1;
+    return strcmp(left->name, right->name);
+}
+
+static void print_network_screen(const NetworkSnapshot *snapshot, const Options *options,
+                                 bool clear, bool color) {
+    int width = terminal_width();
+    int height = terminal_height();
+    NetworkSnapshot ordered = *snapshot;
+    qsort(ordered.items, ordered.count, sizeof(ordered.items[0]), compare_network_usage);
+    size_t active_count = 0;
+    double receive_rate = 0.0;
+    double transmit_rate = 0.0;
+    for (size_t i = 0; i < snapshot->count; i++) {
+        if (snapshot->items[i].up) active_count++;
+        receive_rate += snapshot->items[i].receive_rate;
+        transmit_rate += snapshot->items[i].transmit_rate;
+    }
+    char receive_total[16], transmit_total[16];
+    format_compact_bytes((unsigned long long)receive_rate, receive_total, sizeof(receive_total));
+    format_compact_bytes((unsigned long long)transmit_rate, transmit_total, sizeof(transmit_total));
+    if (clear) fputs("\033[H\033[2J", stdout);
+    print_view_header("NETWORKS", options->interval_ms, width, color);
+
+    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    printf("  TRAFFIC  %zu active · %zu total    ↓ RX %s/s    ↑ TX %s/s\n",
+           active_count, snapshot->count, receive_total, transmit_total);
+    if (color) fputs(ANSI_RESET ANSI_SLATE, stdout);
+    fputs("  ─────────────────────────────────────────────────────────────────────────\n", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+
+    size_t max_rows = snapshot->count;
+    if (height > 6 && max_rows > (size_t)(height - 6)) max_rows = (size_t)(height - 6);
+    size_t rendered_count = 0;
+    for (int show_active = 1; show_active >= 0 && rendered_count < max_rows; show_active--) {
+        for (size_t i = 0; i < ordered.count && rendered_count < max_rows; i++) {
+            const NetworkInterface *network = &ordered.items[i];
+            if ((network->up ? 1 : 0) != show_active) continue;
+        char receive_rate[16], transmit_rate[16], received[16], transmitted[16];
+        format_compact_bytes((unsigned long long)network->receive_rate, receive_rate, sizeof(receive_rate));
+        format_compact_bytes((unsigned long long)network->transmit_rate, transmit_rate, sizeof(transmit_rate));
+        format_compact_bytes(network->received, received, sizeof(received));
+        format_compact_bytes(network->transmitted, transmitted, sizeof(transmitted));
+        const char *status_color = color ? (network->up ? ANSI_GREEN : ANSI_RED) : "";
+        const char *muted = color ? ANSI_DIM : "";
+        if (width >= 78) {
+            printf("  %s●%s %-10s  %s%-4s%s  %s↓%7s/s  ↑%7s/s%s   in %-8s out %-8s\n",
+                   status_color, color ? ANSI_RESET : "", network->name, status_color,
+                   network->up ? "UP" : "DOWN", color ? ANSI_RESET : "", muted,
+                   receive_rate, transmit_rate, color ? ANSI_RESET : "", received, transmitted);
+        } else {
+            printf("  %s●%s %-8s %s%-4s%s  ↓%s/s ↑%s/s  in%s out%s\n",
+                   status_color, color ? ANSI_RESET : "", network->name, status_color,
+                   network->up ? "UP" : "DOWN", color ? ANSI_RESET : "", receive_rate,
+                   transmit_rate, received, transmitted);
+        }
+            rendered_count++;
+        }
+    }
+    if (rendered_count < ordered.count) {
+        if (color) fputs(ANSI_DIM, stdout);
+        printf("  + %zu more interface%s below terminal height\n",
+               ordered.count - rendered_count, ordered.count - rendered_count == 1 ? "" : "s");
+        if (color) fputs(ANSI_RESET, stdout);
+    }
+    if (snapshot->count == 0) puts("  No network interfaces available.");
+    fflush(stdout);
+}
+
+static void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, bool color) {
+    int width = terminal_width();
+    int height = terminal_height();
+    NetworkSnapshot ordered = *snapshot;
+    qsort(ordered.items, ordered.count, sizeof(ordered.items[0]), compare_network_usage);
+    size_t active_count = 0;
+    double receive_rate = 0.0;
+    double transmit_rate = 0.0;
+    for (size_t i = 0; i < ordered.count; i++) {
+        if (ordered.items[i].up) active_count++;
+        receive_rate += ordered.items[i].receive_rate;
+        transmit_rate += ordered.items[i].transmit_rate;
+    }
+    char receive_total[16], transmit_total[16];
+    format_compact_bytes((unsigned long long)receive_rate, receive_total, sizeof(receive_total));
+    format_compact_bytes((unsigned long long)transmit_rate, transmit_total, sizeof(transmit_total));
+    if (clear) fputs("\033[H\033[2J", stdout);
+
+    print_compact_header("NETWORKS", width, color);
+    if (color) fputs(ANSI_DIM, stdout);
+    printf("  %zu/%zu up  ↓%s/s ↑%s/s\n", active_count, ordered.count,
+           receive_total, transmit_total);
+    if (color) fputs(ANSI_RESET, stdout);
+    if (color) fputs(ANSI_SLATE, stdout);
+    fputs("  ─────────────────────────────────────────────────────────────────────────\n", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+
+    size_t max_rows = ordered.count;
+    if (height > 3 && max_rows > (size_t)(height - 3)) max_rows = (size_t)(height - 3);
+    size_t rendered_count = 0;
+    for (size_t i = 0; i < ordered.count && rendered_count < max_rows; i++) {
+        const NetworkInterface *network = &ordered.items[i];
+        char receive_rate_text[16], transmit_rate_text[16], received[16], transmitted[16];
+        format_compact_bytes((unsigned long long)network->receive_rate, receive_rate_text,
+                             sizeof(receive_rate_text));
+        format_compact_bytes((unsigned long long)network->transmit_rate, transmit_rate_text,
+                             sizeof(transmit_rate_text));
+        format_compact_bytes(network->received, received, sizeof(received));
+        format_compact_bytes(network->transmitted, transmitted, sizeof(transmitted));
+        const char *status_color = color ? (network->up ? ANSI_GREEN : ANSI_RED) : "";
+        if (width >= 72) {
+            printf("  %s●%s %-8s %s%-4s%s ↓%7s/s ↑%7s/s  in %-7s out %-7s\n",
+                   status_color, color ? ANSI_RESET : "", network->name, status_color,
+                   network->up ? "UP" : "DOWN", color ? ANSI_RESET : "", receive_rate_text,
+                   transmit_rate_text, received, transmitted);
+        } else {
+            printf("  %s●%s %-8s %s%-4s%s ↓%s/s ↑%s/s\n",
+                   status_color, color ? ANSI_RESET : "", network->name, status_color,
+                   network->up ? "UP" : "DOWN", color ? ANSI_RESET : "", receive_rate_text,
+                   transmit_rate_text);
+        }
+        rendered_count++;
+    }
+    if (rendered_count < ordered.count) {
+        if (color) fputs(ANSI_DIM, stdout);
+        printf("  + %zu more interface%s\n", ordered.count - rendered_count,
+               ordered.count - rendered_count == 1 ? "" : "s");
+        if (color) fputs(ANSI_RESET, stdout);
+    }
+    fflush(stdout);
+}
+
+static View handle_input(View current) {
+    unsigned char input[32];
+    ssize_t received = read(STDIN_FILENO, input, sizeof(input));
+    if (received <= 0) return current;
+    for (ssize_t i = 0; i < received; i++) {
+        if (input[i] == '1') {
+            current = VIEW_DASHBOARD;
+        } else if (input[i] == '2' || input[i] == 'n' || input[i] == 'N') {
+            current = VIEW_NETWORKS;
+        } else if (input[i] == '\t') {
+            current = current == VIEW_DASHBOARD ? VIEW_NETWORKS : VIEW_DASHBOARD;
+        }
+    }
+    return current;
+}
+
+static View wait_for_input(View current, int timeout_ms) {
+    struct pollfd descriptor = { .fd = STDIN_FILENO, .events = POLLIN };
+    int result;
+    do {
+        result = poll(&descriptor, 1, timeout_ms);
+    } while (result < 0 && errno == EINTR && running);
+    if (result > 0 && (descriptor.revents & POLLIN)) return handle_input(current);
+    return current;
 }
 
 static SystemMetrics collect_system_metrics(void) {
@@ -561,6 +839,15 @@ static void print_wide_short_panel(const Snapshot *snapshot, const double *cores
     }
 }
 
+static void print_compact_metric_label(const char *label, const char *accent, bool color) {
+    if (color) {
+        fputs(accent, stdout);
+        fputs(ANSI_BOLD, stdout);
+    }
+    fputs(label, stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+}
+
 static void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *options,
                                  bool clear, bool color) {
     SystemMetrics metrics = collect_system_metrics();
@@ -576,19 +863,46 @@ static void print_compact_screen(const Snapshot *snapshot, double cpu, const Opt
     int width = terminal_width();
     if (clear) fputs("\033[H\033[2J", stdout);
 
+    print_compact_header("DASHBOARD", width, color);
+
     if (width >= 78) {
-        printf("SYSVIEW  CPU %.0f%%  MEM %s/%s  DISK %s/%s", cpu, memory_used, memory_total,
-               disk_used, disk_total);
-        if (metrics.battery.available) printf("  BAT %d%%", metrics.battery.percent);
+        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        printf(" %.0f%%  ", cpu);
+        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        printf(" %s/%s  ", memory_used, memory_total);
+        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        printf(" %s/%s", disk_used, disk_total);
+        if (metrics.battery.available) {
+            printf("  ");
+            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            printf(" %d%%", metrics.battery.percent);
+        }
         putchar('\n');
     } else if (width >= 60) {
-        printf("SYSVIEW  CPU %.0f%%  MEM %s/%s  DISK %s/%s", cpu, memory_used, memory_total,
-               disk_used, disk_total);
-        if (metrics.battery.available && width >= 70) printf("  BAT %d%%", metrics.battery.percent);
+        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        printf(" %.0f%%  ", cpu);
+        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        printf(" %s/%s  ", memory_used, memory_total);
+        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        printf(" %s/%s", disk_used, disk_total);
+        if (metrics.battery.available && width >= 70) {
+            printf("  ");
+            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            printf(" %d%%", metrics.battery.percent);
+        }
         putchar('\n');
     } else {
-        printf("SYSVIEW  CPU %.0f%%  MEM %.0f%%  DISK %.0f%%", cpu, memory_percent, disk_percent);
-        if (metrics.battery.available) printf("  BAT %d%%", metrics.battery.percent);
+        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        printf(" %.0f%%  ", cpu);
+        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        printf(" %.0f%%  ", memory_percent);
+        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        printf(" %.0f%%", disk_percent);
+        if (metrics.battery.available) {
+            printf("  ");
+            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            printf(" %d%%", metrics.battery.percent);
+        }
         putchar('\n');
     }
 
@@ -645,16 +959,7 @@ static void print_screen(const Snapshot *snapshot, double cpu, const Options *op
     int bar_width = width >= 100 ? 28 : width >= 78 ? 18 : 10;
     if (clear) fputs("\033[H\033[2J", stdout);
 
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
-    fputs("SYSVIEW", stdout);
-    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
-    printf("  /  SYSTEM PULSE    %srefresh %dms%s    %sCtrl-C to quit%s\n",
-           color ? ANSI_TEAL : "", options->interval_ms, color ? ANSI_RESET : "",
-           color ? ANSI_DIM : "", color ? ANSI_RESET : "");
-    if (color) fputs(ANSI_SLATE, stdout);
-    for (int i = 0; i < width - 1; i++) fputs("─", stdout);
-    if (color) fputs(ANSI_RESET, stdout);
-    putchar('\n');
+    print_view_header("DASHBOARD", options->interval_ms, width, color);
 
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     printf("CPU  %5.1f%% ", cpu);
@@ -808,9 +1113,13 @@ int main(int argc, char **argv) {
     bool interactive = isatty(STDOUT_FILENO) && !options.once && !options.json;
     bool color = interactive && !options.no_color && getenv("NO_COLOR") == NULL;
     if (interactive) {
+        configure_terminal();
         fputs(ANSI_ALT_SCREEN ANSI_HIDE_CURSOR ANSI_MOUSE_ON, stdout);
         fflush(stdout);
     }
+    View view = VIEW_DASHBOARD;
+    NetworkSnapshot previous_networks = {0};
+    bool have_previous_networks = false;
     while (running) {
         Snapshot current = {0};
         read_cpu_ticks(&current.ticks, current.core_ticks, &current.core_count);
@@ -824,21 +1133,32 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < core_count; i++) {
             core_usage[i] = cpu_usage(&previous.core_ticks[i], &current.core_ticks[i]);
         }
+        NetworkSnapshot networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
+                                                    elapsed);
         if (options.json) print_json(&current, cpu, &options);
+        else if (view == VIEW_NETWORKS && options.compact) {
+            print_compact_network_screen(&networks, interactive, color);
+        }
+        else if (view == VIEW_NETWORKS) print_network_screen(&networks, &options, interactive, color);
         else if (options.compact) print_compact_screen(&current, cpu, &options, interactive, color);
         else print_screen(&current, cpu, &options, core_usage, core_count, interactive, color);
         free_snapshot(&previous);
         previous = current;
+        previous_networks = networks;
+        have_previous_networks = true;
         if (options.once) break;
-
-        struct timespec delay = { .tv_sec = options.interval_ms / 1000,
-                                  .tv_nsec = (long)(options.interval_ms % 1000) * 1000000L };
-        nanosleep(&delay, NULL);
+        if (interactive) view = wait_for_input(view, options.interval_ms);
+        else {
+            struct timespec delay = { .tv_sec = options.interval_ms / 1000,
+                                      .tv_nsec = (long)(options.interval_ms % 1000) * 1000000L };
+            nanosleep(&delay, NULL);
+        }
     }
     free_snapshot(&previous);
     if (interactive) {
         fputs(ANSI_RESET ANSI_MOUSE_OFF ANSI_SHOW_CURSOR ANSI_MAIN_SCREEN, stdout);
         fflush(stdout);
+        restore_terminal();
     }
     return 0;
 }

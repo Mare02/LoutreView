@@ -31,7 +31,9 @@ The compiled program is `./sysview`. Re-run `make` after changing
 ./sysview
 ```
 
-The interactive dashboard refreshes every second. Press `Ctrl-C` to exit.
+The interactive dashboard refreshes every second. Press `1` for the dashboard,
+`2` or `n` for network statistics, and `Tab` to switch between views. Press
+`Ctrl-C` to exit.
 
 ## Install as a command
 
@@ -106,3 +108,6 @@ is also disabled when output is redirected or the `NO_COLOR` environment
 variable is set. `--compact` is always opt-in; the full dashboard remains the
 default. On wide, short terminals, the full dashboard places top processes
 beside the CPU-core grid and limits that list to the available height.
+
+The interactive Networks view shows each interface's status, current receive
+and transmit rate, and cumulative receive/transmit totals.
