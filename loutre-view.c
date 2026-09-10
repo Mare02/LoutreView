@@ -838,7 +838,7 @@ static void print_spaces(int count) {
 
 static void print_compact_process_header(bool color) {
     if (color) fputs(ANSI_BOLD, stdout);
-    printf("  %-5s  %5s  %6s  %s", "PID", "CPU%", "MEM", "PROCESS");
+    printf("  %-5s  %5s  %6s  %3s  %s", "PID", "CPU%", "MEM", "THR", "PROCESS");
     if (color) fputs(ANSI_RESET, stdout);
 }
 
@@ -851,7 +851,7 @@ static void print_compact_process_row(const Process *process, int name_width, bo
     if (color) fputs(process_color, stdout);
     printf("%5.1f", process->cpu_percent);
     if (color) fputs(ANSI_RESET, stdout);
-    printf("  %6s  ", resident);
+    printf("  %6s  %3d  ", resident, process->threads);
     print_process_name(process->name, name_width);
 }
 
@@ -869,7 +869,7 @@ static void print_wide_short_panel(const Snapshot *snapshot, const double *cores
     const int core_panel_width = core_columns == 1 ? 22 : 48;
     const int left_width = core_columns == 1 ? 26 : 50;
     const size_t core_rows = (core_count + (size_t)core_columns - 1) / (size_t)core_columns;
-    const int name_width = width - left_width - 24;
+    const int name_width = width - left_width - 29;
     const size_t process_count = snapshot->processes.count < (size_t)process_rows ?
                                  snapshot->processes.count : (size_t)process_rows;
 
@@ -984,7 +984,7 @@ static void print_compact_screen(const Snapshot *snapshot, double cpu, const Opt
     }
     putchar('\n');
     size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
-    int name_width = width - (show_memory ? 24 : 17);
+    int name_width = width - (show_memory ? 29 : 17);
     if (name_width < 1) name_width = 1;
     for (size_t i = 0; i < count; i++) {
         const Process *process = &snapshot->processes.items[i];
