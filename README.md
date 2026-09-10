@@ -23,7 +23,7 @@ Python, Homebrew, or another package manager.
 On supported macOS machines, install the prebuilt CLI with:
 
 ```sh
-curl -fsSL https://loutreview.com/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | sh
 ```
 
 This installs the binary to `~/.local/bin/loutre-view` and verifies the
