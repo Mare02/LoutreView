@@ -18,6 +18,18 @@
 `loutre-view` uses macOS system frameworks directly, so it does not need Node,
 Python, Homebrew, or another package manager.
 
+## Install the latest release
+
+On supported macOS machines, install the prebuilt CLI with:
+
+```sh
+curl -fsSL https://loutreview.com/install.sh | sh
+```
+
+This installs the binary to `~/.local/bin/loutre-view` and verifies the
+download against the release checksum. To install a specific release, set
+`LOUTREVIEW_VERSION`, for example `LOUTREVIEW_VERSION=v1.0.0`.
+
 ## Build from this project
 
 Clone the repository, enter its directory, and compile the executable:
