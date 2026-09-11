@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh |
 
 This installs the binary to `~/.local/bin/loutre-view` and verifies the
 download against the release checksum. To install a specific release, set
-`LOUTREVIEW_VERSION`, for example `LOUTREVIEW_VERSION=v1.0.0`.
+`LOUTREVIEW_VERSION`, for example `LOUTREVIEW_VERSION=v0.1.0`.
 
 ## Build from this project
 
