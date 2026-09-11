@@ -29,7 +29,7 @@
 #include <pwd.h>
 #include <unistd.h>
 
-#define VERSION "1.0.0"
+#define VERSION "1.0.2"
 #define DEFAULT_LIMIT 12
 #define MIN_INTERVAL_MS 250
 #define MAX_CPU_CORES 128
