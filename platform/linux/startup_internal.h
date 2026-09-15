@@ -40,7 +40,6 @@ typedef struct {
 StartupList linux_startup_collect(const LinuxStartupOptions *options);
 void linux_startup_incomplete(StartupList *list, MetricStatus status);
 StartupItem *linux_startup_append(StartupList *list, StartupKind kind, const char *name);
-void linux_startup_copy(char *dst, size_t capacity, const char *src);
 LinuxStartupCommandResult linux_startup_run(
     const char *const argv[], char *output, size_t capacity,
     unsigned timeout_ms, void *context);

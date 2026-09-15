@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include "buffer.h"
 #include "startup_internal.h"
 
 #include <errno.h>
@@ -81,12 +82,9 @@ LinuxStartupCommandResult linux_startup_run(
             char chunk[4096];
             ssize_t got = read(pipefd[0], chunk, sizeof(chunk));
             if (got > 0) {
-                if ((size_t)got >= capacity - used) {
+                if (buffer_append(output, capacity, &used, chunk, (size_t)got) != BUFFER_OK) {
                     result = LINUX_STARTUP_COMMAND_LIMIT; break;
                 }
-                memcpy(output + used, chunk, (size_t)got);
-                used += (size_t)got;
-                output[used] = '\0';
             } else if (got == 0) eof = true;
             else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
                 result = LINUX_STARTUP_COMMAND_ERROR; break;

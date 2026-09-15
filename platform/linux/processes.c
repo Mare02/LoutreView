@@ -1,4 +1,5 @@
 #include "linux.h"
+#include "buffer.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -106,13 +107,10 @@ ProcessList platform_processes(void) {
         ssize_t length = readlinkat(process_fd, "exe", process.path, sizeof(process.path) - 1);
         close(process_fd);
         if (length >= 0) process.path[length] = '\0';
-        if (list.count == capacity) {
-            size_t next = capacity ? capacity * 2 : 128;
-            if (next > SIZE_MAX / sizeof(Process)) { list.status = METRIC_ERROR; break; }
-            Process *items = realloc(list.items, next * sizeof(*items));
-            if (!items) { list.status = METRIC_ERROR; break; }
-            list.items = items;
-            capacity = next;
+        if (!buffer_reserve((void **)&list.items, &capacity, list.count + 1,
+                            sizeof(*list.items), 128, SIZE_MAX / sizeof(*list.items))) {
+            list.status = METRIC_ERROR;
+            break;
         }
         list.items[list.count++] = process;
     }

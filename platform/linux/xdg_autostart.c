@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include "buffer.h"
 #include "startup_internal.h"
 
 #include <dirent.h>
@@ -102,25 +103,19 @@ static void desktop_file(const LinuxStartupOptions *options, StartupList *list,
                          const char *path, const char *name, bool user) {
     StartupItem *item = linux_startup_append(list, STARTUP_DESKTOP_AUTOSTART, name);
     if (!item) return;
-    linux_startup_copy(item->path, sizeof(item->path), path);
-    linux_startup_copy(item->owner, sizeof(item->owner), user ? "user" : "system");
+    (void)buffer_copy(item->path, sizeof(item->path), path);
+    (void)buffer_copy(item->owner, sizeof(item->owner), user ? "user" : "system");
     int fd = open(path, O_RDONLY | O_NONBLOCK);
     struct stat st;
     if (fd < 0 || fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size > LINUX_STARTUP_DESKTOP_CAP) {
         if (fd >= 0) close(fd);
-        linux_startup_copy(item->state, sizeof(item->state), "unreadable");
+        (void)buffer_copy(item->state, sizeof(item->state), "unreadable");
         linux_startup_incomplete(list, METRIC_ERROR); return;
     }
     char text[LINUX_STARTUP_DESKTOP_CAP + 1]; size_t used = 0;
-    while (used < LINUX_STARTUP_DESKTOP_CAP) {
-        ssize_t got = read(fd, text + used, LINUX_STARTUP_DESKTOP_CAP - used);
-        if (got == 0) break;
-        if (got < 0) { if (errno == EINTR) continue; close(fd); linux_startup_incomplete(list, METRIC_ERROR); return; }
-        used += (size_t)got;
-    }
+    BufferResult read_result = buffer_read_fd(fd, text, sizeof(text), &used);
     close(fd);
-    if (used == LINUX_STARTUP_DESKTOP_CAP || memchr(text, '\0', used)) { linux_startup_incomplete(list, METRIC_ERROR); return; }
-    text[used] = '\0';
+    if (read_result != BUFFER_OK || memchr(text, '\0', used)) { linux_startup_incomplete(list, METRIC_ERROR); return; }
     char *exec = NULL, *try_exec = NULL, *only = NULL, *exclude = NULL, *type = NULL;
     bool section = false, hidden = false, valid = true, seen = false;
     char *save = NULL;
@@ -148,7 +143,7 @@ static void desktop_file(const LinuxStartupOptions *options, StartupList *list,
     else if (try_exec && *try_exec && (!unescape(try_exec, token, sizeof(token)) || !executable(token, options->search_path))) { state = "tryexec-missing"; item->path_missing = true; }
     else if (!exec || !linux_startup_exec_token(exec, token, sizeof(token))) { state = "exec-unknown"; item->enabled_known = false; linux_startup_incomplete(list, METRIC_UNAVAILABLE); }
     else { item->path_missing = !executable(token, options->search_path); item->enabled = true; if (item->path_missing) state = "exec-missing"; }
-    linux_startup_copy(item->state, sizeof(item->state), state);
+    (void)buffer_copy(item->state, sizeof(item->state), state);
 }
 
 typedef struct { char (*names)[256]; size_t count; } DesktopSeen;
@@ -169,7 +164,7 @@ static void desktop_dir(const LinuxStartupOptions *options, StartupList *list,
         for (size_t i = 0; i < seen->count; i++) if (!strcmp(seen->names[i], entry->d_name)) { duplicate = true; break; }
         if (duplicate) continue;
         if (n >= 256 || seen->count == LINUX_STARTUP_ITEM_CAP || list->count == LINUX_STARTUP_ITEM_CAP) { linux_startup_incomplete(list, METRIC_ERROR); break; }
-        linux_startup_copy(seen->names[seen->count++], 256, entry->d_name);
+        (void)buffer_copy(seen->names[seen->count++], 256, entry->d_name);
         char full[LOUTRE_PATH_MAX]; len = snprintf(full, sizeof(full), "%s/%s", dirpath, entry->d_name);
         if (len < 0 || (size_t)len >= sizeof(full)) { linux_startup_incomplete(list, METRIC_ERROR); continue; }
         desktop_file(options, list, full, entry->d_name, user);
@@ -178,8 +173,11 @@ static void desktop_dir(const LinuxStartupOptions *options, StartupList *list,
 }
 
 void linux_xdg_autostart_collect(const LinuxStartupOptions *options, StartupList *list) {
-    DesktopSeen seen = { .names = calloc(LINUX_STARTUP_ITEM_CAP, sizeof(*seen.names)) };
-    if (!seen.names) { linux_startup_incomplete(list, METRIC_ERROR); return; }
+    DesktopSeen seen = {0};
+    if (!buffer_calloc((void **)&seen.names, LINUX_STARTUP_ITEM_CAP, sizeof(*seen.names))) {
+        linux_startup_incomplete(list, METRIC_ERROR);
+        return;
+    }
     desktop_dir(options, list, &seen, options->config_home, true);
     char *dirs = strdup(options->config_dirs ? options->config_dirs : "/etc/xdg");
     if (!dirs) linux_startup_incomplete(list, METRIC_ERROR);

@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include "buffer.h"
 #include "startup_internal.h"
 
 #include <ctype.h>
@@ -97,15 +98,15 @@ static void apply_properties(StartupList *list, StartupKind kind, const Properti
     StartupItem *item = service(list, kind, properties->id);
     if (!item) return;
     if (*properties->enabled) enabled_state(item, properties->enabled);
-    linux_startup_copy(item->path, sizeof(item->path), properties->fragment);
+    (void)buffer_copy(item->path, sizeof(item->path), properties->fragment);
     item->path_missing = *properties->fragment && access(properties->fragment, F_OK) != 0;
     if (properties->have_pid && properties->pid <= INT_MAX) item->pid = (pid_t)properties->pid;
     if (properties->have_memory && properties->memory != ULLONG_MAX) {
         item->resident = properties->memory;
         item->memory_known = true;
     }
-    linux_startup_copy(item->state, sizeof(item->state),
-                       *properties->sub ? properties->sub : (*properties->active ? properties->active : "unknown"));
+    (void)buffer_copy(item->state, sizeof(item->state),
+                      *properties->sub ? properties->sub : (*properties->active ? properties->active : "unknown"));
     if (!strcmp(properties->active, "inactive") || !strcmp(properties->active, "failed")) {
         item->running_known = true; item->running = false;
     } else if (!strcmp(properties->active, "active") || !strcmp(properties->active, "activating") ||
@@ -129,11 +130,11 @@ static void properties(StartupList *list, StartupKind kind, char *text) {
             char *equal = strchr(line, '=');
             if (equal) {
                 *equal++ = '\0';
-                if (!strcmp(line, "Id")) linux_startup_copy(parsed.id, sizeof(parsed.id), equal);
-                else if (!strcmp(line, "ActiveState")) linux_startup_copy(parsed.active, sizeof(parsed.active), equal);
-                else if (!strcmp(line, "SubState")) linux_startup_copy(parsed.sub, sizeof(parsed.sub), equal);
-                else if (!strcmp(line, "UnitFileState")) linux_startup_copy(parsed.enabled, sizeof(parsed.enabled), equal);
-                else if (!strcmp(line, "FragmentPath")) linux_startup_copy(parsed.fragment, sizeof(parsed.fragment), equal);
+                if (!strcmp(line, "Id")) (void)buffer_copy(parsed.id, sizeof(parsed.id), equal);
+                else if (!strcmp(line, "ActiveState")) (void)buffer_copy(parsed.active, sizeof(parsed.active), equal);
+                else if (!strcmp(line, "SubState")) (void)buffer_copy(parsed.sub, sizeof(parsed.sub), equal);
+                else if (!strcmp(line, "UnitFileState")) (void)buffer_copy(parsed.enabled, sizeof(parsed.enabled), equal);
+                else if (!strcmp(line, "FragmentPath")) (void)buffer_copy(parsed.fragment, sizeof(parsed.fragment), equal);
                 else if (!strcmp(line, "MainPID")) parsed.have_pid = number(equal, &parsed.pid);
                 else if (!strcmp(line, "MemoryCurrent")) parsed.have_memory = number(equal, &parsed.memory);
             } else linux_startup_incomplete(list, METRIC_ERROR);
