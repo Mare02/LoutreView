@@ -21,7 +21,7 @@ INCLUDE_FLAGS := -Iinclude
 # Compiler and flag changes must never reuse incompatible objects.
 CONFIG := $(shell printf '%s\n' "$(CC)" "$(CPPFLAGS)" "$(PLATFORM_CPPFLAGS)" "$(CFLAGS)" "$(LDFLAGS)" "$(LDLIBS)" "$(STRICT_FLAGS)" "$(INCLUDE_FLAGS)" | cksum | awk '{print $$1}')
 BUILD_DIR := build/$(OS)/$(CONFIG)
-SOURCES := $(sort $(wildcard src/*.c src/ui/*.c platform/common/*.c platform/$(PLATFORM)/*.c))
+SOURCES := $(sort $(wildcard src/*.c src/ui/*.c src/usage/*.c src/providers/*.c platform/common/*.c platform/$(PLATFORM)/*.c))
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 LIB_OBJECTS := $(filter-out $(BUILD_DIR)/src/main.o,$(OBJECTS))
 TEST_SOURCES := $(wildcard tests/test_*.c)

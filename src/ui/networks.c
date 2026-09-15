@@ -34,6 +34,7 @@ static int compare_network_usage(const void *left_value, const void *right_value
 
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options,
                                  bool clear, bool color) {
+    (void)options;
     if (snapshot->status != METRIC_OK) {
         if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
         print_compact_header("NETWORKS", terminal_width(), color);
@@ -57,7 +58,7 @@ void print_network_screen(const NetworkSnapshot *snapshot, const Options *option
     format_rate(receive_rate, receive_total, sizeof(receive_total));
     format_rate(transmit_rate, transmit_total, sizeof(transmit_total));
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
-    print_view_header("NETWORKS", options->interval_ms, width, color);
+    print_view_header("NETWORKS", width, color);
 
     if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
     printf("  TRAFFIC  %zu active · %zu total    ↓ RX %s/s    ↑ TX %s/s\n",

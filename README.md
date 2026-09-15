@@ -170,6 +170,24 @@ Options:
 | `-h`, `--help` | Show command help. |
 | `-v`, `--version` | Show the installed version. |
 
+### Coding CLI usage
+
+Press `3` or `u` in the live dashboard to open the Coding CLI Usage view.
+Press `Tab` to cycle through the dashboard, network, and AI usage views. The
+AI usage view reads credential-free, machine-readable provider snapshots from the
+user state directory and shows available quota windows and reset times. It
+does not add usage data to `--json` output.
+
+Provider bridges can ingest a payload from standard input:
+
+```sh
+loutre-view usage ingest claude < claude-statusline.json
+```
+
+Use `codex` or `gemini` for a matching provider bridge payload. Set
+`LOUTREVIEW_USAGE_DIR` to choose a cache directory; otherwise LoutreView uses
+`$XDG_STATE_HOME/loutre-view/usage` or `~/.local/state/loutre-view/usage`.
+
 `--json` automatically enables `--once`. In the interactive dashboard, color
 is also disabled when output is redirected or the `NO_COLOR` environment
 variable is set. `--compact` is always opt-in; the full dashboard remains the

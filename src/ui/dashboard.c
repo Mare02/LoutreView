@@ -254,7 +254,7 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
     double disk_percent = metrics.disk_status == METRIC_OK && metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : NAN;
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
-    print_view_header("DASHBOARD", options->interval_ms, layout->width, color);
+    print_view_header("DASHBOARD", layout->width, color);
 
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     fputs("CPU  ", stdout); print_percent(cpu, 5, 1, true); putchar(' ');

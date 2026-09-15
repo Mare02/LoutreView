@@ -1448,8 +1448,8 @@
   ],
   "appState": {
     "viewBackgroundColor": "#ffffff",
-    "scrollX": -45,
-    "scrollY": 166,
+    "scrollX": -155,
+    "scrollY": 65,
     "zoom": {
       "value": 1
     }

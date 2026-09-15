@@ -50,18 +50,17 @@ bool configure_terminal(void) {
     return true;
 }
 
-void print_view_header(const char *view_name, int interval_ms, int width, bool color) {
+void print_view_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 80) {
         printf("  /  %s\n", view_name);
         if (color) fputs(ANSI_DIM, stdout);
-        printf("1:dashboard · 2:networks   refresh %dms\n", interval_ms);
+        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks   refresh %dms\n",
-               view_name, interval_ms);
+        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
     }
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = 0; i < width - 1; i++) fputs("─", stdout);
@@ -76,10 +75,10 @@ void print_compact_header(const char *view_name, int width, bool color) {
     if (width < 70) {
         printf("  /  %s\n", view_name);
         if (color) fputs(ANSI_DIM, stdout);
-        fputs("1:dashboard · 2:networks\n", stdout);
+        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks\n", view_name);
+        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
     }
 }
 
@@ -107,8 +106,11 @@ static bool handle_input(View *current) {
             next = VIEW_DASHBOARD;
         } else if (input[i] == '2' || input[i] == 'n' || input[i] == 'N') {
             next = VIEW_NETWORKS;
+        } else if (input[i] == '3' || input[i] == 'u' || input[i] == 'U') {
+            next = VIEW_USAGE;
         } else if (input[i] == '\t') {
-            next = *current == VIEW_DASHBOARD ? VIEW_NETWORKS : VIEW_DASHBOARD;
+            next = *current == VIEW_DASHBOARD ? VIEW_NETWORKS :
+                   *current == VIEW_NETWORKS ? VIEW_USAGE : VIEW_DASHBOARD;
         }
         if (next != *current) {
             *current = next;

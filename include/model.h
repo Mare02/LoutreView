@@ -15,7 +15,7 @@
 
 typedef enum { METRIC_OK, METRIC_UNAVAILABLE, METRIC_PERMISSION, METRIC_ERROR } MetricStatus;
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
-typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS } View;
+typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE } View;
 /* Backend-normalized cumulative counters. Busy includes steal and IRQ on Linux;
  * idle includes iowait. Guest time is already included in user/nice. */
 typedef struct { unsigned long long user, system, idle, nice; } CpuTicks;
@@ -67,7 +67,8 @@ typedef struct {
 } NetworkSnapshot;
 typedef struct {
     int interval_ms, limit;
-    bool once, json, compact, no_color, startup;
+    bool once, json, compact, no_color, startup, usage_ingest;
+    char usage_provider[32];
     SortMode sort;
 } Options;
 typedef enum {

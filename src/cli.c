@@ -14,6 +14,7 @@
 
 #include "cli.h"
 #include "version.h"
+#include "usage_provider.h"
 #include <errno.h>
 
 void print_usage(FILE *stream) {
@@ -30,6 +31,7 @@ void print_usage(FILE *stream) {
         "      --no-color       Disable terminal color\n"
         "\nCommands:\n"
         "  startup              Inspect startup services and login items\n"
+        "  usage ingest NAME    Cache provider usage JSON from stdin\n"
         "  -h, --help           Show this help\n"
         "  -v, --version        Show version\n", MIN_INTERVAL_MS, DEFAULT_LIMIT);
 }
@@ -48,6 +50,14 @@ int parse_args(int argc, char **argv, Options *options) {
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         if (!strcmp(arg, "startup")) { options->startup = true; continue; }
+        if (!strcmp(arg, "usage")) {
+            if (++i >= argc || strcmp(argv[i], "ingest") != 0 || ++i >= argc) return -1;
+            const UsageProvider *provider = usage_provider_find(argv[i]);
+            if (!provider) return -1;
+            options->usage_ingest = true;
+            snprintf(options->usage_provider, sizeof(options->usage_provider), "%s", provider->name);
+            continue;
+        }
         if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) { print_usage(stdout); exit(0); }
         if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("loutre-view " VERSION); exit(0); }
         if (!strcmp(arg, "--once")) { options->once = true; continue; }

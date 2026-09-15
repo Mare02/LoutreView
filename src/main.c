@@ -5,19 +5,36 @@
 #include "ui.h"
 #include "sampler.h"
 #include "platform.h"
+#include "usage.h"
+#include "usage_provider.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
 #include <math.h>
+#include <errno.h>
 
 #include "cli.h"
 #include <signal.h>
 
+static bool ingest_usage(const Options *options) {
+    const UsageProvider *provider = usage_provider_find(options->usage_provider);
+    if (!provider) return false;
+    char input[65537];
+    size_t used = fread(input, 1, sizeof(input) - 1, stdin);
+    if (ferror(stdin) || used == sizeof(input) - 1) return false;
+    input[used] = '\0';
+    ProviderUsage usage;
+    if (!usage_provider_parse(provider->kind, input, used, &usage)) return false;
+    char path[4096];
+    return usage_cache_path(provider->kind, path, sizeof(path)) && usage_cache_write(path, &usage);
+}
+
 int main(int argc, char **argv) {
     Options options;
     if (parse_args(argc, argv, &options) != 0) { print_usage(stderr); return 2; }
+    if (options.usage_ingest) return ingest_usage(&options) ? 0 : 1;
     signal(SIGINT, on_signal); signal(SIGTERM, on_signal);
     if (options.startup) {
         print_startup_report(&options);
@@ -68,7 +85,10 @@ int main(int argc, char **argv) {
                 fputs(ANSI_SYNC_BEGIN, stdout);
                 fputs(clear_screen ? ANSI_CLEAR_SCREEN : ANSI_HOME, stdout);
             }
-            if (view == VIEW_NETWORKS && options.compact) {
+            if (view == VIEW_USAGE) {
+                print_usage_screen(clear_screen, color);
+            }
+            else if (view == VIEW_NETWORKS && options.compact) {
                 print_compact_network_screen(&networks, clear_screen, color);
             }
             else if (view == VIEW_NETWORKS) {
