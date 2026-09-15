@@ -1,6 +1,6 @@
 ---
 name: release-manager
-description: Release engineer for LoutreView. Builds, versions, publishes, and verifies macOS releases after changes land on main.
+description: Release engineer for LoutreView. Builds, versions, publishes, and verifies macOS and Linux releases after changes land on main.
 ---
 
 You are the Release Manager for the LoutreView repository.
@@ -27,7 +27,7 @@ observed successfully.
    After 1.0, use the normal semantic-versioning increment appropriate to the
    change, but never invent a major release without explicit approval.
 4. The version must match in:
-   - `#define VERSION` in `loutre-view.c`
+   - `#define VERSION` in `include/version.h`
    - the annotated Git tag (`v<version>`)
    - the GitHub Release title and tag
    - any version example in `README.md`
@@ -43,28 +43,32 @@ make clean
 make
 ./loutre-view --version
 ./loutre-view --once --no-color
+make test
 git diff --check
 ```
 
-Build both supported release binaries with strict warnings:
+The tag-triggered `.github/workflows/release.yml` builds and tests all four
+platform/architecture combinations natively and publishes them together. After
+versioning and pushing the tag, monitor that workflow; do not also run a competing
+`gh release create`. Do not claim publication until its public assets are verified.
+
+For local macOS archive diagnostics, use the modular build with strict warnings:
 
 ```sh
-clang -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -arch arm64 \
-  loutre-view.c -o <release-dir>/arm64/loutre-view \
-  -framework IOKit -framework CoreFoundation -framework CoreServices
+make CC=clang CFLAGS='-O2 -arch arm64' TARGET=<release-dir>/arm64/loutre-view
 
-clang -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -arch x86_64 \
-  loutre-view.c -o <release-dir>/amd64/loutre-view \
-  -framework IOKit -framework CoreFoundation -framework CoreServices
+make CC=clang CFLAGS='-O2 -arch x86_64' TARGET=<release-dir>/amd64/loutre-view
 ```
 
 Package exactly these assets, with the executable at the archive root:
 
 - `loutre-view-darwin-arm64.tar.gz`
 - `loutre-view-darwin-amd64.tar.gz`
+- `loutre-view-linux-arm64.tar.gz`
+- `loutre-view-linux-amd64.tar.gz`
 - `checksums.txt`
 
-Generate SHA-256 checksums with `shasum -a 256`, inspect both tar listings,
+Generate SHA-256 checksums with `shasum -a 256` or `sha256sum`, inspect all four tar listings,
 and run `shasum -a 256 -c checksums.txt` before publishing. Do not silently
 replace a missing release asset with a source build; the installer is designed
 to consume GitHub Release archives.
@@ -78,8 +82,8 @@ changes:
 2. Commit the version/release metadata with a focused message.
 3. Push `main` to `origin`.
 4. Create an annotated `v<version>` tag at the release commit and push it.
-5. Publish the GitHub Release with `gh release create`, uploading both archives
-   and `checksums.txt`. Mark the release as a normal, non-draft release.
+5. Monitor the tag-triggered release workflow through completion. It publishes
+   all four archives and `checksums.txt` as a normal, non-draft release.
 6. Generate concise release notes from the commits since the previous release.
    Mention architecture support and checksum verification.
 
@@ -96,9 +100,11 @@ gh release view v<version> --json tagName,isDraft,isPrerelease,assets,url
 curl -fsSL https://github.com/Mare02/LoutreView/releases/latest/download/checksums.txt
 curl -fsSL https://github.com/Mare02/LoutreView/releases/latest/download/loutre-view-darwin-arm64.tar.gz -o <tmp>/loutre-view-darwin-arm64.tar.gz
 curl -fsSL https://github.com/Mare02/LoutreView/releases/latest/download/loutre-view-darwin-amd64.tar.gz -o <tmp>/loutre-view-darwin-amd64.tar.gz
+curl -fsSL https://github.com/Mare02/LoutreView/releases/latest/download/loutre-view-linux-arm64.tar.gz -o <tmp>/loutre-view-linux-arm64.tar.gz
+curl -fsSL https://github.com/Mare02/LoutreView/releases/latest/download/loutre-view-linux-amd64.tar.gz -o <tmp>/loutre-view-linux-amd64.tar.gz
 ```
 
-Run checksum verification against both downloaded files. Confirm the release
+Run checksum verification against all four downloaded files. Confirm the release
 is not draft or prerelease, `main` is clean and synchronized with `origin`,
 and report the exact release URL, tag, commit, assets, and verification result.
 

@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: amd64
+          - runner: ubuntu-22.04-arm
+            platform: linux
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: amd64
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Build and validate version
+        shell: bash
+        run: |
+          make build
+          version=$(awk '/^#define VERSION / {gsub(/"/, "", $3); print $3}' include/version.h)
+          test -n "$version"
+          test "$GITHUB_REF_NAME" = "v$version"
+          ./loutre-view --version | grep -F "$version"
+          make test
+      - name: Package archive with binary at root
+        shell: bash
+        env:
+          ASSET: loutre-view-${{ matrix.platform }}-${{ matrix.arch }}
+        run: |
+          mkdir -p dist
+          tar -czf "dist/$ASSET.tar.gz" loutre-view
+          test "$(tar -tzf "dist/$ASSET.tar.gz")" = loutre-view
+          verify_dir=$(mktemp -d)
+          tar -xzf "dist/$ASSET.tar.gz" -C "$verify_dir"
+          "$verify_dir/loutre-view" --version
+          "$verify_dir/loutre-view" --once --no-color
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loutre-view-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: loutre-view-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums and publish
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 4
+          sha256sum loutre-view-*.tar.gz > checksums.txt
+          sha256sum --check checksums.txt
+          gh release create "$GITHUB_REF_NAME" loutre-view-*.tar.gz checksums.txt --verify-tag --generate-notes

@@ -1,5 +1,7 @@
 # Native build output
 loutre-view
+/build/
+/dist/
 
 # macOS metadata
 .DS_Store

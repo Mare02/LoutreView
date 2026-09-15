@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            cc: gcc
+          - runner: ubuntu-22.04
+            cc: clang
+          - runner: ubuntu-22.04-arm
+            cc: gcc
+          - runner: macos-15
+            cc: clang
+          - runner: macos-15-intel
+            cc: clang
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: make CC=${{ matrix.cc }} build
+      - run: ./loutre-view --version
+      - run: ./loutre-view --once --no-color
+      - run: make CC=${{ matrix.cc }} test
+      - run: git diff --check
+
+  sanitizers:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Address and undefined behavior sanitizers
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: make CC=clang CFLAGS='-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined' LDFLAGS='-fsanitize=address,undefined' test
