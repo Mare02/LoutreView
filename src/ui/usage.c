@@ -7,12 +7,6 @@
 #include <string.h>
 #include <time.h>
 
-static const ProviderUsage *find_provider(const UsageSnapshot *snapshot, const char *name) {
-    for (size_t i = 0; i < snapshot->count; i++)
-        if (!strcmp(snapshot->providers[i].provider, name)) return &snapshot->providers[i];
-    return NULL;
-}
-
 static void print_reset(time_t reset) {
     time_t now = time(NULL);
     if (reset <= now) { fputs("now", stdout); return; }
@@ -44,11 +38,15 @@ void print_usage_screen(bool clear, bool color) {
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
     print_compact_header("AI USAGE", terminal_width(), color);
     UsageSnapshot snapshot = collect_usage();
-    for (size_t i = 0; i < usage_provider_count(); i++) {
-        const UsageProvider *provider = usage_provider_at(i);
-        const ProviderUsage *usage = find_provider(&snapshot, provider->name);
+    if (snapshot.count == 0) {
+        puts("\n  No installed AI CLI providers detected");
+        fflush(stdout);
+        return;
+    }
+    for (size_t i = 0; i < snapshot.count; i++) {
+        const ProviderUsage *usage = &snapshot.providers[i];
         if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
-        printf("\n%s\n", provider->name);
+        printf("\n%s\n", usage->provider);
         if (color) fputs(ANSI_RESET, stdout);
         if (!usage || !usage->available || usage->window_count == 0) {
             puts("  Usage data unavailable");

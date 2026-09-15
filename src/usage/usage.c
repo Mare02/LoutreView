@@ -12,6 +12,38 @@ static ProviderUsage codex_live_usage;
 static time_t codex_live_collected_at;
 static bool codex_live_attempted;
 
+static const char *provider_command(UsageProviderKind kind) {
+    switch (kind) {
+    case USAGE_PROVIDER_CODEX: return "codex";
+    case USAGE_PROVIDER_CLAUDE_CODE: return "claude";
+    case USAGE_PROVIDER_GEMINI_CLI: return "gemini";
+    }
+    return NULL;
+}
+
+static bool command_installed(const char *command) {
+    if (!command || !*command) return false;
+    const char *path = getenv("PATH");
+    if (!path || !*path) path = "/usr/bin:/bin";
+    while (*path) {
+        const char *separator = strchr(path, ':');
+        size_t directory_length = separator ? (size_t)(separator - path) : strlen(path);
+        char candidate[USAGE_PATH_MAX];
+        int written;
+        if (directory_length == 0)
+            written = snprintf(candidate, sizeof(candidate), "%s", command);
+        else
+            written = snprintf(candidate, sizeof(candidate), "%.*s/%s",
+                               (int)directory_length, path, command);
+        if (written > 0 && (size_t)written < sizeof(candidate) &&
+            access(candidate, X_OK) == 0)
+            return true;
+        if (!separator) break;
+        path = separator + 1;
+    }
+    return false;
+}
+
 static const char *usage_cache_root(void) {
     const char *override = getenv("LOUTREVIEW_USAGE_DIR");
     if (override && *override) return override;
@@ -88,6 +120,7 @@ UsageSnapshot collect_usage(void) {
     for (size_t i = 0; i < 3; i++) {
         const UsageProvider *provider = usage_provider_at(i);
         if (!provider) continue;
+        if (!command_installed(provider_command(provider->kind))) continue;
         ProviderUsage usage;
         usage_init(&usage, provider->name);
         snapshot.providers[snapshot.count++] = usage;
