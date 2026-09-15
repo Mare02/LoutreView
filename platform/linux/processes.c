@@ -61,14 +61,15 @@ bool linux_parse_process(const char *line, long ticks, long page_size, time_t bo
     return true;
 }
 
-ProcessList platform_processes(void) {
+ProcessList linux_collect_processes(const char *proc_root, long ticks, long pages) {
     ProcessList list = {0};
-    long ticks = sysconf(_SC_CLK_TCK), pages = sysconf(_SC_PAGESIZE);
     if (ticks <= 0 || pages <= 0) { list.status = METRIC_ERROR; return list; }
-    DIR *directory = opendir("/proc");
+    DIR *directory = opendir(proc_root);
     if (!directory) { list.status = linux_errno_status(); return list; }
     time_t boot = 0;
-    FILE *stat = fopen("/proc/stat", "r");
+    char stat_path[LOUTRE_PATH_MAX];
+    int stat_length = snprintf(stat_path, sizeof(stat_path), "%s/stat", proc_root);
+    FILE *stat = stat_length < 0 || (size_t)stat_length >= sizeof(stat_path) ? NULL : fopen(stat_path, "r");
     if (stat) {
         char line[1024];
         while (fgets(line, sizeof(line), stat)) {
@@ -116,4 +117,8 @@ ProcessList platform_processes(void) {
     }
     closedir(directory);
     return list;
+}
+
+ProcessList platform_processes(void) {
+    return linux_collect_processes("/proc", sysconf(_SC_CLK_TCK), sysconf(_SC_PAGESIZE));
 }

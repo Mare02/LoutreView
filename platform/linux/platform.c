@@ -49,10 +49,10 @@ bool linux_parse_cpu(const char *line, CpuTicks *out, unsigned *id, bool *aggreg
     return true;
 }
 
-MetricStatus platform_cpu(Snapshot *out) {
+MetricStatus linux_collect_cpu(const char *stat_path, Snapshot *out) {
     out->ticks = (CpuTicks){0};
     out->core_count = 0;
-    FILE *file = fopen("/proc/stat", "r");
+    FILE *file = fopen(stat_path, "r");
     if (!file) return out->cpu_status = linux_errno_status();
     char *line = NULL;
     size_t size = 0;
@@ -73,6 +73,8 @@ MetricStatus platform_cpu(Snapshot *out) {
     fclose(file);
     return out->cpu_status = found && !failed ? METRIC_OK : METRIC_ERROR;
 }
+
+MetricStatus platform_cpu(Snapshot *out) { return linux_collect_cpu("/proc/stat", out); }
 
 double platform_uptime(void) {
     FILE *file = fopen("/proc/uptime", "r");

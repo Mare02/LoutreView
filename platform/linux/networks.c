@@ -29,17 +29,18 @@ bool linux_parse_network(const char *line, NetworkInterface *out) {
     return true;
 }
 
-NetworkSnapshot platform_networks(void) {
+NetworkSnapshot linux_collect_networks(const char *dev_path, const char *sys_net_root) {
     NetworkSnapshot result = {0};
-    FILE *file = fopen("/proc/net/dev", "r");
+    FILE *file = fopen(dev_path, "r");
     if (!file) { result.status = linux_errno_status(); return result; }
     char line[1024];
     while (fgets(line, sizeof(line), file)) {
         NetworkInterface item;
         if (!linux_parse_network(line, &item)) continue;
         if (result.count == MAX_NETWORK_INTERFACES) { result.truncated = true; continue; }
-        char path[128];
-        snprintf(path, sizeof(path), "/sys/class/net/%s/flags", item.name);
+        char path[LOUTRE_PATH_MAX];
+        int length = snprintf(path, sizeof(path), "%s/%s/flags", sys_net_root, item.name);
+        if (length < 0 || (size_t)length >= sizeof(path)) continue;
         FILE *flags = fopen(path, "r");
         if (flags) {
             unsigned value = 0;
@@ -51,4 +52,8 @@ NetworkSnapshot platform_networks(void) {
     if (ferror(file)) result.status = METRIC_ERROR;
     fclose(file);
     return result;
+}
+
+NetworkSnapshot platform_networks(void) {
+    return linux_collect_networks("/proc/net/dev", "/sys/class/net");
 }

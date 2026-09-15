@@ -21,15 +21,16 @@ bool linux_parse_memory(FILE *file, SystemMetrics *out) {
     return true;
 }
 
-MetricStatus platform_memory(SystemMetrics *out) {
+MetricStatus linux_collect_memory(const char *meminfo_path, const char *pressure_path,
+                                  SystemMetrics *out) {
     out->memory_total = out->memory_used = out->pressure = 0;
     out->pressure_available = out->pressure_percent_available = false;
     out->pressure_source = NULL;
-    FILE *file = fopen("/proc/meminfo", "r");
+    FILE *file = fopen(meminfo_path, "r");
     if (!file) return out->memory_status = linux_errno_status();
     bool ok = linux_parse_memory(file, out);
     fclose(file);
-    file = fopen("/proc/pressure/memory", "r");
+    file = fopen(pressure_path, "r");
     if (file) {
         char line[256];
         while (fgets(line, sizeof(line), file)) {
@@ -45,4 +46,8 @@ MetricStatus platform_memory(SystemMetrics *out) {
         fclose(file);
     }
     return out->memory_status = ok ? METRIC_OK : METRIC_ERROR;
+}
+
+MetricStatus platform_memory(SystemMetrics *out) {
+    return linux_collect_memory("/proc/meminfo", "/proc/pressure/memory", out);
 }
