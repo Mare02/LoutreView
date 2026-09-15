@@ -36,7 +36,7 @@ observed successfully.
 
 ## Build and validation
 
-Run from the repository root on macOS:
+Run the following from the repository root on the current native platform:
 
 ```sh
 make clean
@@ -46,6 +46,17 @@ make
 make test
 git diff --check
 ```
+
+On Linux, the native commands above validate the Linux backend. When Docker is
+available, also run `make linux-test`; it builds and tests the source with both
+GCC and Clang in the disposable Linux test container. The container uses a
+read-only source mount and does not replace validation on real Linux hardware,
+different distributions/libcs, desktop integration, or a complete systemd-user
+session.
+
+On macOS, the native commands validate the macOS backend. Run `make linux-test`
+there as well when Docker is available so the Linux backend is covered before
+publishing a release.
 
 The tag-triggered `.github/workflows/release.yml` builds and tests all four
 platform/architecture combinations natively and publishes them together. After

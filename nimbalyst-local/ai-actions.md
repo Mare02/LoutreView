@@ -30,7 +30,8 @@ When you're done, grill me about about the things u are not sure and confirm eve
 ## Build and Publish Release
 /release the current LoutreView version across all supported platforms.
 
-Follow the repository's release procedure:
+Use the repository's custom `release-manager` agent from
+`.agents/agents/release-manager/agent.md` and follow its release procedure:
 - inspect the current branch, working tree, latest tag, and `include/version.h`
 - confirm the release version and ensure the `v*` tag will match `VERSION`
 - only release from the `main` branch after the intended changes are present
