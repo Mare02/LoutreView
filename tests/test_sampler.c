@@ -19,6 +19,23 @@ int main(void) {
     sample_process_usage(&after, &before, 1);
     assert(!isfinite(next[0].cpu_percent) || next[0].cpu_percent == 0);
 
+    Process old_many[] = {
+        {.pid=10, .start_id=1000, .cpu_time=1000000000},
+        {.pid=20, .start_id=2000, .cpu_time=2000000000},
+        {.pid=30, .start_id=3000, .cpu_time=3000000000},
+    };
+    Process next_many[] = {
+        {.pid=30, .start_id=3000, .cpu_time=5000000000},
+        {.pid=10, .start_id=1000, .cpu_time=2000000000},
+        {.pid=20, .start_id=2001, .cpu_time=4000000000}, /* PID was reused. */
+    };
+    ProcessList before_many = {.items=old_many, .count=3, .status=METRIC_OK};
+    ProcessList after_many = {.items=next_many, .count=3, .status=METRIC_OK};
+    sample_process_usage(&after_many, &before_many, 2);
+    assert(fabs(next_many[0].cpu_percent - 100) < .001);
+    assert(fabs(next_many[1].cpu_percent - 50) < .001);
+    assert(isnan(next_many[2].cpu_percent));
+
     Process unordered[] = {{.pid=1, .cpu_percent=NAN}, {.pid=2, .cpu_percent=20},
                            {.pid=3, .cpu_percent=90}, {.pid=4, .cpu_percent=NAN}};
     ProcessList order = {.items=unordered, .count=4};

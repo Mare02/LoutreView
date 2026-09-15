@@ -95,13 +95,49 @@ size_t sample_core_usage(const Snapshot *before, const Snapshot *after, double *
     return count;
 }
 
+static size_t process_identity_hash(pid_t pid, unsigned long long start_id) {
+    uint64_t value = (uint64_t)(intmax_t)pid;
+    value ^= (uint64_t)start_id + UINT64_C(0x9e3779b97f4a7c15) + (value << 6) + (value >> 2);
+    value ^= value >> 30;
+    value *= UINT64_C(0xbf58476d1ce4e5b9);
+    value ^= value >> 27;
+    value *= UINT64_C(0x94d049bb133111eb);
+    return (size_t)(value ^ (value >> 31));
+}
+
 void sample_process_usage(ProcessList *current, const ProcessList *previous, double elapsed) {
+    size_t *buckets = NULL, *next = NULL, bucket_count = 1;
     for (size_t i = 0; i < current->count; i++) {
         Process *p = &current->items[i];
         p->cpu_percent = NAN;
-        if (!previous || previous->status != METRIC_OK || current->status != METRIC_OK ||
-            !isfinite(elapsed) || elapsed <= 0 || !p->start_id) continue;
-        for (size_t j = 0; j < previous->count; j++) {
+    }
+    if (!previous || previous->status != METRIC_OK || current->status != METRIC_OK ||
+        !isfinite(elapsed) || elapsed <= 0 || previous->count == 0 ||
+        previous->count > SIZE_MAX / sizeof(*next)) return;
+
+    /* Keep load below 0.5 so identity lookups stay close to constant time. */
+    if (previous->count > SIZE_MAX / 2) return;
+    while (bucket_count < previous->count * 2) {
+        if (bucket_count > SIZE_MAX / 2) return;
+        bucket_count *= 2;
+    }
+    if (bucket_count > SIZE_MAX / sizeof(*buckets)) return;
+    buckets = malloc(bucket_count * sizeof(*buckets));
+    next = malloc(previous->count * sizeof(*next));
+    if (!buckets || !next) goto done;
+    for (size_t i = 0; i < bucket_count; i++) buckets[i] = SIZE_MAX;
+
+    for (size_t i = 0; i < previous->count; i++) {
+        const Process *old = &previous->items[i];
+        size_t bucket = process_identity_hash(old->pid, old->start_id) & (bucket_count - 1);
+        next[i] = buckets[bucket];
+        buckets[bucket] = i;
+    }
+    for (size_t i = 0; i < current->count; i++) {
+        Process *p = &current->items[i];
+        if (!p->start_id) continue;
+        size_t bucket = process_identity_hash(p->pid, p->start_id) & (bucket_count - 1);
+        for (size_t j = buckets[bucket]; j != SIZE_MAX; j = next[j]) {
             const Process *old = &previous->items[j];
             if (old->pid != p->pid || old->start_id != p->start_id) continue;
             if (p->cpu_time >= old->cpu_time)
@@ -109,6 +145,9 @@ void sample_process_usage(ProcessList *current, const ProcessList *previous, dou
             break;
         }
     }
+done:
+    free(next);
+    free(buckets);
 }
 
 void sample_network_usage(NetworkSnapshot *current, const NetworkSnapshot *previous, double elapsed) {
