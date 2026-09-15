@@ -43,7 +43,7 @@ Set `LOUTREVIEW_INSTALL_DIR` the same way to change the destination. Installatio
 fails if the checksum is missing, the checksum tool fails, or verification fails.
 The release workflow is configured to produce `checksums.txt` and the following
 four archives, each with `loutre-view` at the archive root. This describes build
-targets, not a completed publication:
+targets included in the current release:
 
 - `loutre-view-darwin-amd64.tar.gz`
 - `loutre-view-darwin-arm64.tar.gz`
