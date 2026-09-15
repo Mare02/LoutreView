@@ -1,6 +1,7 @@
 #ifndef LOUTRE_UI_H
 #define LOUTRE_UI_H
 #include "model.h"
+#include "layout.h"
 #include <signal.h>
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -32,8 +33,11 @@ void print_view_header(const char *view_name, int interval_ms, int width, bool c
 void print_compact_header(const char *view_name, int width, bool color);
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options, bool clear, bool color);
 void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, bool color);
-void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *options, bool clear, bool color);
-void print_screen(const Snapshot *snapshot, double cpu, const Options *options, const double *core_usage, size_t core_count, bool clear, bool color);
+void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
+                              const TerminalLayout *layout, bool clear, bool color);
+void render_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
+                      const double *core_usage, size_t core_count,
+                      const TerminalLayout *layout, bool clear, bool color);
 void print_startup_report(const Options *options);
 void print_json(const Snapshot *snapshot, double cpu, const Options *options);
 void json_string(const char *value);

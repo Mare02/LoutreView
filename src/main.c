@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
         else {
             int current_width = terminal_width();
             int current_height = terminal_height();
+            TerminalLayout layout = calculate_layout(current_width, current_height, &options);
             if (interactive && (current_width != rendered_width ||
                                 current_height != rendered_height)) {
                 clear_screen = true;
@@ -74,10 +75,11 @@ int main(int argc, char **argv) {
                 print_network_screen(&networks, &options, clear_screen, color);
             }
             else if (options.compact) {
-                print_compact_screen(&current, cpu, &options, clear_screen, color);
+                render_compact_dashboard(&current, cpu, &options, &layout, clear_screen, color);
             }
             else {
-                print_screen(&current, cpu, &options, core_usage, core_count, clear_screen, color);
+                render_dashboard(&current, cpu, &options, core_usage, core_count, &layout,
+                                 clear_screen, color);
             }
             if (interactive) {
                 fputs(ANSI_SYNC_END, stdout);

@@ -12,8 +12,9 @@
 #include <unistd.h>
 #include <math.h>
 
-static void print_core_grid(const double *cores, size_t count, int width, bool color) {
-    int columns = width >= 92 ? 3 : width >= 62 ? 2 : 1;
+static void print_core_grid(const double *cores, size_t count, const TerminalLayout *layout,
+                            bool color) {
+    int columns = layout->dashboard_core_columns;
     const int meter_width = 6;
 
     putchar('\n');
@@ -127,8 +128,8 @@ static void print_compact_metric_label(const char *label, const char *accent, bo
     if (color) fputs(ANSI_RESET, stdout);
 }
 
-void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *options,
-                                 bool clear, bool color) {
+void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
+                              const TerminalLayout *layout, bool clear, bool color) {
     SystemMetrics metrics = collect_system_metrics();
     char memory_used[16], memory_total[16], disk_used[16], disk_total[16], pressure[16], uptime[32];
     format_compact_bytes(metrics.memory_used, memory_used, sizeof(memory_used));
@@ -148,12 +149,11 @@ void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *o
 
     double memory_percent = metrics.memory_status == METRIC_OK && metrics.memory_total ? 100.0 * (double)metrics.memory_used / metrics.memory_total : NAN;
     double disk_percent = metrics.disk_status == METRIC_OK && metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : NAN;
-    int width = terminal_width();
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
-    print_compact_header("DASHBOARD", width, color);
+    print_compact_header("DASHBOARD", layout->width, color);
 
-    if (width >= 78) {
+    if (layout->compact_pressure) {
         print_compact_metric_label("CPU", ANSI_CYAN, color);
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("MEM", ANSI_TEAL, color);
@@ -166,14 +166,14 @@ void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *o
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
-    } else if (width >= 60) {
+    } else if (layout->compact_full_metrics) {
         print_compact_metric_label("CPU", ANSI_CYAN, color);
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("MEM", ANSI_TEAL, color);
         printf(" %s/%s  ", memory_used, memory_total);
         print_compact_metric_label("DISK", ANSI_AMBER, color);
         printf(" %s/%s", disk_used, disk_total);
-        if (metrics.battery.available && width >= 70) {
+        if (metrics.battery.available && layout->compact_battery) {
             printf("  ");
             print_compact_metric_label("BAT", ANSI_AMBER, color);
             printf(" %d%%", metrics.battery.percent);
@@ -195,11 +195,11 @@ void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *o
     }
 
     if (metrics.load_status == METRIC_OK) printf("load %.2f · %.2f · %.2f", metrics.loads[0], metrics.loads[1], metrics.loads[2]); else fputs("load n/a", stdout);
-    if (width >= 60) printf("  · up %s", uptime);
-    if (width >= 78) printf("  · pressure %s", pressure);
+    if (layout->compact_uptime) printf("  · up %s", uptime);
+    if (layout->compact_pressure) printf("  · pressure %s", pressure);
     putchar('\n');
 
-    bool show_memory = width >= 60;
+    bool show_memory = layout->compact_process_memory;
     if (show_memory) print_compact_process_header(color);
     else {
         if (color) fputs(ANSI_BOLD, stdout);
@@ -209,7 +209,7 @@ void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *o
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
     size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
-    int name_width = width - (show_memory ? 29 : 17);
+    int name_width = layout->width - (show_memory ? 29 : 17);
     if (name_width < 1) name_width = 1;
     for (size_t i = 0; i < count; i++) {
         const Process *process = &snapshot->processes.items[i];
@@ -230,9 +230,9 @@ void print_compact_screen(const Snapshot *snapshot, double cpu, const Options *o
     fflush(stdout);
 }
 
-void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
-                         const double *core_usage, size_t core_count,
-                         bool clear, bool color) {
+void render_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
+                      const double *core_usage, size_t core_count,
+                      const TerminalLayout *layout, bool clear, bool color) {
     SystemMetrics metrics = collect_system_metrics();
     char memory_used_text[24], memory_total_text[24], pressure_text[24], disk_used_text[24], disk_total_text[24], uptime[32];
     format_bytes(metrics.memory_used, memory_used_text, sizeof(memory_used_text));
@@ -252,37 +252,34 @@ void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
 
     double memory_percent = metrics.memory_status == METRIC_OK && metrics.memory_total ? 100.0 * (double)metrics.memory_used / metrics.memory_total : NAN;
     double disk_percent = metrics.disk_status == METRIC_OK && metrics.disk_total ? 100.0 * (double)metrics.disk_used / metrics.disk_total : NAN;
-    int width = terminal_width();
-    int height = terminal_height();
-    int bar_width = width >= 100 ? 28 : width >= 78 ? 18 : 10;
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
 
-    print_view_header("DASHBOARD", options->interval_ms, width, color);
+    print_view_header("DASHBOARD", options->interval_ms, layout->width, color);
 
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     fputs("CPU  ", stdout); print_percent(cpu, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
-    print_bar(cpu, bar_width, color);
+    print_bar(cpu, layout->dashboard_bar_width, color);
     if (metrics.load_status == METRIC_OK) printf("  Load %.2f · %.2f · %.2f\n", metrics.loads[0], metrics.loads[1], metrics.loads[2]); else puts("  Load n/a");
 
     if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
     fputs("MEM  ", stdout); print_percent(memory_percent, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
-    print_bar(memory_percent, bar_width, color);
+    print_bar(memory_percent, layout->dashboard_bar_width, color);
     printf("  %s / %s  %spressure %s%s\n", memory_used_text, memory_total_text,
            color ? ANSI_DIM : "", pressure_text, color ? ANSI_RESET : "");
 
     if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
     fputs("DISK ", stdout); print_percent(disk_percent, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
-    print_bar(disk_percent, bar_width, color);
+    print_bar(disk_percent, layout->dashboard_bar_width, color);
     printf("  %s / %s  %suptime %s%s\n", disk_used_text, disk_total_text,
            color ? ANSI_DIM : "", uptime, color ? ANSI_RESET : "");
     if (metrics.battery.available) {
         if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
         printf("BAT  %5d%% ", metrics.battery.percent);
         if (color) fputs(ANSI_RESET, stdout);
-        print_bar((double)metrics.battery.percent, bar_width, color);
+        print_bar((double)metrics.battery.percent, layout->dashboard_bar_width, color);
         printf("  %s", metrics.battery.state);
         if (metrics.battery.time_remaining_minutes >= 0) {
             char battery_time[24];
@@ -292,30 +289,18 @@ void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
         putchar('\n');
     }
 
-    int standard_core_columns = width >= 92 ? 3 : width >= 62 ? 2 : 1;
-    size_t standard_core_rows = (core_count + (size_t)standard_core_columns - 1) /
-                                (size_t)standard_core_columns;
     size_t process_count = snapshot->processes.count < (size_t)options->limit ?
                            snapshot->processes.count : (size_t)options->limit;
     if (!metrics.battery.available) puts("BAT    n/a");
-    int metric_rows = 6;
-    int standard_rows = metric_rows + 3 + (int)standard_core_rows + 2 + (int)process_count;
-    int side_core_columns = width >= 78 ? 2 : 1;
-    size_t side_core_rows = (core_count + (size_t)side_core_columns - 1) /
-                            (size_t)side_core_columns;
-    bool use_side_panel = width >= 62 && height > 0 && height < standard_rows &&
-                          height >= metric_rows + 2 + (int)side_core_rows;
-    if (use_side_panel) {
-        int side_process_rows = height - metric_rows - 3;
-        if (side_process_rows > 8) side_process_rows = 8;
-        if (side_process_rows < 1) side_process_rows = 1;
-        print_wide_short_panel(snapshot, core_usage, core_count, width, side_core_columns,
-                               side_process_rows, color);
+    if (layout_uses_dashboard_side_panel(layout, core_count, process_count)) {
+        print_wide_short_panel(snapshot, core_usage, core_count, layout->width,
+                               layout->dashboard_side_core_columns,
+                               layout_dashboard_side_process_rows(layout), color);
         fflush(stdout);
         return;
     }
 
-    print_core_grid(core_usage, core_count, width, color);
+    print_core_grid(core_usage, core_count, layout, color);
 
     if (color) fputs(ANSI_BOLD, stdout);
     printf("  PID    CPU%%     MEM  THR  PROCESS");
@@ -324,7 +309,7 @@ void print_screen(const Snapshot *snapshot, double cpu, const Options *options,
            color ? ANSI_RESET : "");
     if (color) fputs(ANSI_SLATE, stdout);
     printf("  ─────  ─────  ──────  ───  ");
-    for (int i = 0; i < width - 33; i++) fputs("─", stdout);
+    for (int i = 0; i < layout->width - 33; i++) fputs("─", stdout);
     if (color) fputs(ANSI_RESET, stdout);
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
