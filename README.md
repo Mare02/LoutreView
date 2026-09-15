@@ -25,9 +25,7 @@ smoke tests only.
 ## Install the latest release
 
 The installer supports macOS and Linux when the selected release has a matching
-archive. Linux archives will be available only after a Linux-capable release is
-published; `v0.1.0` does not include Linux archives. Until then, build the Linux
-port from this branch's sources. To install an available prebuilt CLI:
+archive. To install the latest prebuilt CLI:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | sh
@@ -38,7 +36,7 @@ download against the release checksum. To install a specific release, set
 `LOUTREVIEW_VERSION` on the shell running the installer:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | LOUTREVIEW_VERSION=v0.1.0 sh
+curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | LOUTREVIEW_VERSION=v0.2.0 sh
 ```
 
 Set `LOUTREVIEW_INSTALL_DIR` the same way to change the destination. Installation
