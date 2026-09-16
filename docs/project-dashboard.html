@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoutreView — project status</title>
+  <style>
+    :root { color-scheme: light; --text:#17202b; --muted:#697586; --faint:#f6f8fa; --line:#e3e8ee; --accent:#2563eb; --success:#16803c; --success-bg:#eaf7ef; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--text); background:#fff; font:14px/1.5 var(--font); }
+    a { color:var(--accent); }
+    .page { max-width:1040px; margin:0 auto; padding:48px 28px 64px; }
+    header { display:flex; align-items:baseline; justify-content:space-between; gap:24px; margin-bottom:40px; }
+    h1 { margin:0; font-size:22px; font-weight:600; letter-spacing:-.02em; }
+    header p { margin:0; color:var(--muted); }
+    .summary { display:grid; grid-template-columns:1.15fr .85fr; gap:20px; margin-bottom:24px; }
+    .card { border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .version-card { padding:28px 30px; }
+    .label { margin:0 0 8px; color:var(--muted); font-size:13px; }
+    .version { display:flex; align-items:center; gap:16px; }
+    .version strong { font:500 56px/1 var(--mono); letter-spacing:-.08em; }
+    .version small { color:var(--muted); font-size:13px; }
+    .release-status { display:inline-flex; align-items:center; gap:8px; margin-top:24px; padding:6px 10px; color:var(--success); background:var(--success-bg); border-radius:5px; font-size:13px; font-weight:600; }
+    .release-status::before { width:7px; height:7px; border-radius:50%; background:var(--success); content:""; }
+    .details { padding:24px 26px; }
+    h2 { margin:0 0 18px; font-size:14px; font-weight:600; }
+    dl { display:grid; grid-template-columns:1fr auto; gap:12px 20px; margin:0; }
+    dt { color:var(--muted); }
+    dd { margin:0; font-family:var(--mono); font-size:12px; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:36px; }
+    .metric { padding:18px 20px; }
+    .metric strong { display:block; margin-bottom:3px; font:500 22px var(--mono); }
+    .metric span { color:var(--muted); font-size:12px; }
+    .section { margin-top:32px; }
+    .section-heading { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+    .section-heading h2 { margin:0; }
+    .section-heading span { color:var(--muted); font:12px var(--mono); }
+    .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
+    table { width:100%; min-width:580px; border-collapse:collapse; }
+    th,td { padding:14px 16px; border-bottom:1px solid var(--line); text-align:left; }
+    th { color:var(--muted); background:var(--faint); font-size:12px; font-weight:500; }
+    td { font-size:13px; }
+    tr:last-child td { border-bottom:0; }
+    .passed { color:var(--success); font-weight:600; }
+    .mono { font-family:var(--mono); font-size:12px; }
+    .events { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .event { padding:16px 18px; }
+    .event time { display:block; margin-bottom:4px; color:var(--muted); font:11px var(--mono); }
+    .event p { margin:0; }
+    footer { margin-top:40px; color:var(--muted); font-size:12px; }
+    @media (max-width:700px) { .page{padding:28px 16px 48px;} header,.summary{display:block;} header p{margin-top:6px;} .details{margin-top:12px;} .metrics{grid-template-columns:repeat(2,1fr);} .events{grid-template-columns:1fr;} }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header><h1>LoutreView project status</h1><p>Current version and release overview</p></header>
+    <section class="summary" aria-label="Current release summary">
+      <article class="card version-card"><p class="label">Current version</p><div class="version"><strong>0.2.2</strong><small>released<br>16 Sep 2026</small></div><div class="release-status">Published release · v0.2.2</div></article>
+      <article class="card details"><h2>Release details</h2><dl><dt>Branch</dt><dd>main</dd><dt>Tagged commit</dt><dd>4ac767c</dd><dt>Archives</dt><dd>4 / 4</dd><dt>Checksums</dt><dd class="passed">verified</dd><dt>Workflow</dt><dd>release.yml</dd></dl></article>
+    </section>
+    <section class="metrics" aria-label="Release metrics"><article class="card metric"><strong>4</strong><span>platform archives</span></article><article class="card metric"><strong>2</strong><span>operating systems</span></article><article class="card metric"><strong>2</strong><span>CPU architectures</span></article><article class="card metric"><strong>100%</strong><span>checksum verification</span></article></section>
+    <section class="section"><div class="section-heading"><h2>Delivery targets</h2><span>v0.2.2</span></div><div class="table-wrap"><table><thead><tr><th>Target</th><th>Archive</th><th>Status</th><th>Validation</th></tr></thead><tbody><tr><td>macOS arm64</td><td class="mono">darwin-arm64</td><td class="passed">Passed</td><td>Build + smoke test</td></tr><tr><td>macOS amd64</td><td class="mono">darwin-amd64</td><td class="passed">Passed</td><td>Build + smoke test</td></tr><tr><td>Linux arm64</td><td class="mono">linux-arm64</td><td class="passed">Passed</td><td>Build + test suite</td></tr><tr><td>Linux amd64</td><td class="mono">linux-amd64</td><td class="passed">Passed</td><td>Build + test suite</td></tr></tbody></table></div></section>
+    <section class="section"><div class="section-heading"><h2>Recent release activity</h2><span>observed project state</span></div><div class="events"><article class="card event"><time>16 SEP 2026</time><p>v0.2.2 published with four archives and checksums.</p></article><article class="card event"><time>16 SEP 2026</time><p>Release workflow completed build, test, package, and publish jobs.</p></article></div></section>
+    <footer>Source: <span class="mono">include/version.h</span>, <span class="mono">.github/workflows/release.yml</span>, README, and commit <span class="mono">4ac767c</span>. <a href="https://github.com/Mare02/LoutreView/releases/tag/v0.2.2">Open GitHub release</a>.</footer>
+  </main>
+</body>
+</html>
