@@ -8,7 +8,10 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
+
+extern volatile sig_atomic_t running;
 
 bool codex_usage_parse(const char *input, size_t length, ProviderUsage *output) {
     return usage_parse_bridge_json(input, length, "Codex", output);
@@ -62,13 +65,29 @@ static bool read_app_server(char *output, size_t capacity) {
 
     size_t used = 0;
     output[0] = '\0';
+    struct timespec deadline;
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += 2;
     while (ok && used + 1 < capacity) {
+        if (!running) { ok = false; break; }
         fd_set read_set;
         FD_ZERO(&read_set);
         FD_SET(output_pipe[0], &read_set);
-        struct timeval timeout = {.tv_sec = 2, .tv_usec = 0};
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        time_t seconds = deadline.tv_sec - now.tv_sec;
+        long nanoseconds = deadline.tv_nsec - now.tv_nsec;
+        if (nanoseconds < 0) { seconds--; nanoseconds += 1000000000L; }
+        if (seconds < 0 || (seconds == 0 && nanoseconds <= 0)) { ok = false; break; }
+        struct timeval timeout = {
+            .tv_sec = seconds,
+            .tv_usec = nanoseconds / 1000
+        };
         int ready = select(output_pipe[0] + 1, &read_set, NULL, NULL, &timeout);
-        if (ready < 0 && errno == EINTR) continue;
+        if (ready < 0 && errno == EINTR) {
+            if (!running) { ok = false; break; }
+            continue;
+        }
         if (ready <= 0) { ok = false; break; }
         ssize_t count = read(output_pipe[0], output + used, capacity - used - 1);
         if (count < 0 && errno == EINTR) continue;

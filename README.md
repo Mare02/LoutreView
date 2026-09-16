@@ -36,7 +36,7 @@ download against the release checksum. To install a specific release, set
 `LOUTREVIEW_VERSION` on the shell running the installer:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | LOUTREVIEW_VERSION=v0.2.1 sh
+curl -fsSL https://raw.githubusercontent.com/Mare02/LoutreView/main/install.sh | LOUTREVIEW_VERSION=v0.2.2 sh
 ```
 
 Set `LOUTREVIEW_INSTALL_DIR` the same way to change the destination. Installation
