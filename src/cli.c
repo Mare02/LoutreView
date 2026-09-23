@@ -28,7 +28,6 @@ void print_usage(FILE *stream) {
         "      --compact        Use a dense live dashboard\n"
         "      --once           Print one report and exit\n"
         "      --json           Emit one JSON report and exit\n"
-        "      --no-color       Disable terminal color\n"
         "\nCommands:\n"
         "  startup              Inspect startup services and login items\n"
         "  usage ingest NAME    Cache provider usage JSON from stdin\n"
@@ -63,7 +62,6 @@ int parse_args(int argc, char **argv, Options *options) {
         if (!strcmp(arg, "--once")) { options->once = true; continue; }
         if (!strcmp(arg, "--json")) { options->json = true; options->once = true; continue; }
         if (!strcmp(arg, "--compact")) { options->compact = true; continue; }
-        if (!strcmp(arg, "--no-color")) { options->no_color = true; continue; }
         if (!strcmp(arg, "-i") || !strcmp(arg, "--interval")) {
             if (++i >= argc || !parse_positive(argv[i], MIN_INTERVAL_MS, &options->interval_ms)) return -1;
             continue;

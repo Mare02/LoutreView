@@ -35,7 +35,7 @@ Use the repository's custom `release-manager` agent from
 - inspect the current branch, working tree, latest tag, and `include/version.h`
 - confirm the release version and ensure the `v*` tag will match `VERSION`
 - only release from the `main` branch after the intended changes are present
-- run the required local validation before publishing, including `make clean && make`, `./loutre-view --version`, `./loutre-view --once --no-color`, `make test`, `make linux-test` when Docker is available, and `git diff --check`
+- run the required local validation before publishing, including `make clean && make`, `./loutre-view --version`, `./loutre-view --once`, `make test`, `make linux-test` when Docker is available, and `git diff --check`
 - create and push the matching version tag to trigger `.github/workflows/release.yml`
 - monitor the workflow and confirm native builds complete for Linux amd64, Linux arm64, macOS Intel, and macOS Apple Silicon
 - confirm the GitHub Release contains all four archives and `checksums.txt`, then verify the published assets and installer download path

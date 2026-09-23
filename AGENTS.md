@@ -56,8 +56,8 @@ The CI workflows are part of the project contract:
 
 ## Verification
 
-Run `make clean && make`, `./loutre-view --version`, `./loutre-view --once
---no-color`, `make test`, and `git diff --check` for normal source changes.
+Run `make clean && make`, `./loutre-view --version`, `./loutre-view --once`,
+`make test`, and `git diff --check` for normal source changes.
 
 For platform changes, validate macOS locally and Linux with GCC and Clang in
 an isolated container or VM. Container mounts should be read-only; build in

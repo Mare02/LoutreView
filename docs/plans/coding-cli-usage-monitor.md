@@ -206,7 +206,7 @@ Run the project-required checks after implementation:
 ```sh
 make clean && make
 ./loutre-view --version
-./loutre-view --once --no-color
+./loutre-view --once
 make test
 git diff --check
 ```

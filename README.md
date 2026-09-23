@@ -150,8 +150,6 @@ Useful examples:
 ./loutre-view --sort mem --limit 25  # biggest memory users
 ./loutre-view --interval 500         # refresh twice per second
 ./loutre-view --compact              # dense dashboard for any terminal width
-./loutre-view --no-color             # plain output for any terminal
-loutre-view startup --no-color       # inspect platform startup configuration
 loutre-view startup --json           # machine-readable startup inventory
 loutre-view startup --once           # static one-shot startup report
 ```
@@ -166,7 +164,6 @@ Options:
 | `--compact` | Use a dense dashboard without usage bars or per-core meters. |
 | `--once` | Print one text report and exit. |
 | `--json` | Print one JSON report and exit; useful in scripts. |
-| `--no-color` | Disable ANSI color sequences. |
 | `-h`, `--help` | Show command help. |
 | `-v`, `--version` | Show the installed version. |
 

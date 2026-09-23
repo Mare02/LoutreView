@@ -50,7 +50,7 @@ for sort in ["cpu", "mem", "pid", "name"]:
     else:
         assert data["memory"]["pressure_bytes"] >= 0
 
-for args in [("--once", "--no-color"), ("--once", "--compact", "--no-color")]:
+for args in [("--once",), ("--once", "--compact")]:
     output = run(*args)
     assert "LOUTREVIEW" in output and "CPU" in output and "\x1b" not in output
 startup = json.loads(run("startup", "--json"), parse_constant=invalid_constant)

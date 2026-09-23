@@ -42,7 +42,7 @@ Run the following from the repository root on the current native platform:
 make clean
 make
 ./loutre-view --version
-./loutre-view --once --no-color
+./loutre-view --once
 make test
 git diff --check
 ```

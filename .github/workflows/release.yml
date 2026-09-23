@@ -51,7 +51,7 @@ jobs:
           verify_dir=$(mktemp -d)
           tar -xzf "dist/$ASSET.tar.gz" -C "$verify_dir"
           "$verify_dir/loutre-view" --version
-          "$verify_dir/loutre-view" --once --no-color
+          "$verify_dir/loutre-view" --once
       - uses: actions/upload-artifact@v4
         with:
           name: loutre-view-${{ matrix.platform }}-${{ matrix.arch }}
