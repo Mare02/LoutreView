@@ -42,7 +42,7 @@ void print_startup_report(const Options *options) {
         return;
     }
 
-    bool color = isatty(STDOUT_FILENO) && getenv("NO_COLOR") == NULL;
+    bool color = isatty(STDOUT_FILENO);
     if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     printf("LOUTREVIEW  /  STARTUP\n");
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);

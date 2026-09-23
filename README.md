@@ -185,9 +185,8 @@ Use `codex` or `gemini` for a matching provider bridge payload. Set
 `LOUTREVIEW_USAGE_DIR` to choose a cache directory; otherwise LoutreView uses
 `$XDG_STATE_HOME/loutre-view/usage` or `~/.local/state/loutre-view/usage`.
 
-`--json` automatically enables `--once`. In the interactive dashboard, color
-is also disabled when output is redirected or the `NO_COLOR` environment
-variable is set. `--compact` is always opt-in; the full dashboard remains the
+`--json` automatically enables `--once`. Color is disabled when output is
+redirected. `--compact` is always opt-in; the full dashboard remains the
 default. On wide, short terminals, the full dashboard places top processes
 beside the CPU-core grid and limits that list to the available height.
 

@@ -76,7 +76,7 @@ loop, but there is no explicit machine-readable streaming mode.
 ## Verification
 
 - `make clean && make`
-- `./loutre-view --once --no-color`
+- `./loutre-view --once`
 - `./loutre-view --json`
 - Run the stream mode through a line-oriented JSON parser with a short
   interval and verify multiple frames arrive before process termination.

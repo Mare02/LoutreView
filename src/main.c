@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     nanosleep(&initial_delay, NULL);
 
     bool interactive = isatty(STDOUT_FILENO) && !options.once && !options.json;
-    bool color = interactive && getenv("NO_COLOR") == NULL;
+    bool color = interactive;
     if (interactive) {
         configure_terminal();
         /* Keep mouse input with the terminal so wheel scrolling does not
