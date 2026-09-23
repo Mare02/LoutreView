@@ -147,6 +147,8 @@ Useful examples:
 ```sh
 ./loutre-view --once                 # one readable report
 ./loutre-view --json                 # one machine-readable report
+./loutre-view --json-stream          # continuous newline-delimited JSON
+./loutre-view --json-stream --include-usage # stream with coding CLI usage
 ./loutre-view --sort mem --limit 25  # biggest memory users
 ./loutre-view --interval 500         # refresh twice per second
 ./loutre-view --compact              # dense dashboard for any terminal width
@@ -164,8 +166,24 @@ Options:
 | `--compact` | Use a dense dashboard without usage bars or per-core meters. |
 | `--once` | Print one text report and exit. |
 | `--json` | Print one JSON report and exit; useful in scripts. |
+| `--json-stream` | Print one flushed JSON object per sampling interval; use `--once` for one frame. |
+| `--include-usage` | Add normalized coding CLI usage to `--json-stream` frames; requires `--json-stream`. |
 | `-h`, `--help` | Show command help. |
 | `-v`, `--version` | Show the installed version. |
+
+`--json-stream` emits newline-delimited JSON (NDJSON). Each frame has
+`schema_version`, `type`, `sequence`, `sample_time_monotonic`,
+`sample_interval_ms`, and a `status` object before the existing metric fields.
+Network interfaces are included in the stream frame under `network`; the
+sampled CPU, process, system, and network values come from the same loop
+iteration. Frames are independently parseable and flushed before the next
+sampling interval, so consumers can process them without waiting for the
+process to exit. The sequence starts at zero and increases by one. The
+minimum interval is 250 ms. `SIGINT`, `SIGTERM`, and a closed consumer pipe
+stop the stream cleanly. `--json` remains a single legacy JSON document and
+does not emit stream metadata or usage data. Add `--include-usage` to opt into
+a `usage` object containing installed-provider availability and normalized
+windows from the existing cache/live provider layer.
 
 ### Coding CLI usage
 

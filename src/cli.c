@@ -28,6 +28,8 @@ void print_usage(FILE *stream) {
         "      --compact        Use a dense live dashboard\n"
         "      --once           Print one report and exit\n"
         "      --json           Emit one JSON report and exit\n"
+        "      --json-stream    Emit newline-delimited JSON frames continuously\n"
+        "      --include-usage Add coding CLI usage to stream frames (requires --json-stream)\n"
         "\nCommands:\n"
         "  startup              Inspect startup services and login items\n"
         "  usage ingest NAME    Cache provider usage JSON from stdin\n"
@@ -61,6 +63,8 @@ int parse_args(int argc, char **argv, Options *options) {
         if (!strcmp(arg, "-v") || !strcmp(arg, "--version")) { puts("loutre-view " VERSION); exit(0); }
         if (!strcmp(arg, "--once")) { options->once = true; continue; }
         if (!strcmp(arg, "--json")) { options->json = true; options->once = true; continue; }
+        if (!strcmp(arg, "--json-stream")) { options->json_stream = true; continue; }
+        if (!strcmp(arg, "--include-usage")) { options->include_usage = true; continue; }
         if (!strcmp(arg, "--compact")) { options->compact = true; continue; }
         if (!strcmp(arg, "-i") || !strcmp(arg, "--interval")) {
             if (++i >= argc || !parse_positive(argv[i], MIN_INTERVAL_MS, &options->interval_ms)) return -1;
@@ -81,5 +85,9 @@ int parse_args(int argc, char **argv, Options *options) {
         }
         return -1;
     }
+    if (options->json && options->json_stream) return -1;
+    if (options->startup && options->json_stream) return -1;
+    if (options->usage_ingest && options->json_stream) return -1;
+    if (options->include_usage && !options->json_stream) return -1;
     return 0;
 }

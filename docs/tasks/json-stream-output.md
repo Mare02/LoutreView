@@ -1,7 +1,7 @@
 ---
 id: loutre-view-json-stream-output
 title: Add a machine-readable live metrics stream
-status: planned
+status: complete
 priority: medium
 type: feature
 area: cli-output

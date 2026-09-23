@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
     if (parse_args(argc, argv, &options) != 0) { print_usage(stderr); return 2; }
     if (options.usage_ingest) return ingest_usage(&options) ? 0 : 1;
     signal(SIGINT, on_signal); signal(SIGTERM, on_signal);
+    if (options.json_stream) signal(SIGPIPE, SIG_IGN);
     if (options.startup) {
         print_startup_report(&options);
         return 0;
@@ -45,7 +46,7 @@ int main(int argc, char **argv) {
     struct timespec initial_delay = { .tv_nsec = 200000000L };
     nanosleep(&initial_delay, NULL);
 
-    bool interactive = isatty(STDOUT_FILENO) && !options.once && !options.json;
+    bool interactive = isatty(STDOUT_FILENO) && !options.once && !options.json && !options.json_stream;
     bool color = interactive;
     if (interactive) {
         configure_terminal();
@@ -60,6 +61,7 @@ int main(int argc, char **argv) {
     bool clear_screen = interactive;
     int rendered_width = 0;
     int rendered_height = 0;
+    unsigned long long sequence = 0;
     while (running) {
         Snapshot current = collect_snapshot(&previous);
         double elapsed = current.timestamp - previous.timestamp;
@@ -68,11 +70,24 @@ int main(int argc, char **argv) {
         double core_usage[MAX_CPU_CORES] = {0};
         size_t core_count = sample_core_usage(&previous, &current, core_usage);
         NetworkSnapshot networks = {0};
-        if (view == VIEW_NETWORKS) {
+        if (view == VIEW_NETWORKS || options.json_stream) {
             networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
                                         elapsed);
         }
         if (options.json) print_json(&current, cpu, &options);
+        else if (options.json_stream) {
+            SystemMetrics metrics = collect_system_metrics();
+            UsageSnapshot usage = {0};
+            const UsageSnapshot *usage_pointer = NULL;
+            if (options.include_usage) {
+                usage = collect_usage();
+                usage_pointer = &usage;
+            }
+            if (!print_json_stream_frame(&current, cpu, &metrics, &networks,
+                                         usage_pointer, &options, sequence++)) {
+                running = 0;
+            }
+        }
         else {
             int current_width = terminal_width();
             int current_height = terminal_height();
@@ -110,13 +125,14 @@ int main(int argc, char **argv) {
         }
         free_snapshot(&previous);
         previous = current;
-        if (view == VIEW_NETWORKS) {
+        if (view == VIEW_NETWORKS || options.json_stream) {
             previous_networks = networks;
             have_previous_networks = true;
         } else {
             previous_networks = (NetworkSnapshot){0};
             have_previous_networks = false;
         }
+        if (!running) break;
         if (options.once) break;
         if (interactive) {
             View old_view = view;

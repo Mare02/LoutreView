@@ -2,6 +2,7 @@
 #define LOUTRE_UI_H
 #include "model.h"
 #include "layout.h"
+#include "usage.h"
 #include <signal.h>
 #define ANSI_RESET "\033[0m"
 #define ANSI_BOLD "\033[1m"
@@ -41,6 +42,10 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
                       const TerminalLayout *layout, bool clear, bool color);
 void print_startup_report(const Options *options);
 void print_json(const Snapshot *snapshot, double cpu, const Options *options);
+bool print_json_stream_frame(const Snapshot *snapshot, double cpu,
+                             const SystemMetrics *metrics, const NetworkSnapshot *networks,
+                             const UsageSnapshot *usage, const Options *options,
+                             unsigned long long sequence);
 void json_string(const char *value);
 void print_startup_json(const StartupList *list);
 #endif
