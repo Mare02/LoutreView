@@ -17,7 +17,22 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
+#include <stdio.h>
 const char *platform_name(void) { return "macos"; }
+
+size_t platform_docker_socket_paths(char paths[][DOCKER_SOCKET_PATH_MAX], size_t capacity) {
+    if (!paths || capacity == 0) return 0;
+    size_t count = 0;
+    const char *home = getenv("HOME");
+    if (home && *home) {
+        int n = snprintf(paths[count], DOCKER_SOCKET_PATH_MAX,
+                         "%s/.docker/run/docker.sock", home);
+        if (n > 0 && (size_t)n < DOCKER_SOCKET_PATH_MAX) count++;
+    }
+    if (count < capacity) snprintf(paths[count++], DOCKER_SOCKET_PATH_MAX,
+                                   "/var/run/docker.sock");
+    return count;
+}
 
 MetricStatus platform_memory(SystemMetrics *out);
 static bool read_cpu_ticks(CpuTicks *out, CpuTicks *cores, size_t *core_count) {

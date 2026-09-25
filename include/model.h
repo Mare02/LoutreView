@@ -10,12 +10,14 @@
 #define LOUTRE_PATH_MAX 4096
 #define MAX_CPU_CORES 128
 #define MAX_NETWORK_INTERFACES 64
+#define MAX_DOCKER_CONTAINERS 128
+#define DOCKER_SOCKET_PATH_MAX 108
 #define DEFAULT_LIMIT 12
 #define MIN_INTERVAL_MS 250
 
 typedef enum { METRIC_OK, METRIC_UNAVAILABLE, METRIC_PERMISSION, METRIC_ERROR } MetricStatus;
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
-typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE } View;
+typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE, VIEW_DOCKER } View;
 /* Backend-normalized cumulative counters. Busy includes steal and IRQ on Linux;
  * idle includes iowait. Guest time is already included in user/nice. */
 typedef struct { unsigned long long user, system, idle, nice; } CpuTicks;
@@ -65,6 +67,22 @@ typedef struct {
     MetricStatus status;
     bool truncated;
 } NetworkSnapshot;
+typedef struct {
+    char id[65], name[128], image[192];
+    unsigned long long memory_used, memory_limit;
+    unsigned long long network_received, network_transmitted;
+    unsigned long long cpu_total, cpu_system;
+    unsigned cpu_count;
+    double cpu_percent, receive_rate, transmit_rate;
+    MetricStatus stats_status;
+} DockerContainer;
+typedef struct {
+    DockerContainer items[MAX_DOCKER_CONTAINERS];
+    size_t count;
+    MetricStatus status;
+    bool truncated;
+    char message[96];
+} DockerSnapshot;
 typedef struct {
     int interval_ms, limit;
     bool once, json, json_stream, include_usage, compact, startup, usage_ingest;

@@ -35,6 +35,7 @@ void print_view_header(const char *view_name, int width, bool color);
 void print_compact_header(const char *view_name, int width, bool color);
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options, bool clear, bool color);
 void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, bool color);
+void print_docker_screen(const DockerSnapshot *snapshot, bool clear, bool color);
 void print_usage_screen(bool clear, bool color);
 void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
                               const TerminalLayout *layout, bool clear, bool color);

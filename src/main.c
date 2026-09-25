@@ -7,6 +7,7 @@
 #include "platform.h"
 #include "usage.h"
 #include "usage_provider.h"
+#include "docker.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +59,11 @@ int main(int argc, char **argv) {
     View view = VIEW_DASHBOARD;
     NetworkSnapshot previous_networks = {0};
     bool have_previous_networks = false;
+    DockerSnapshot docker = { .status = METRIC_UNAVAILABLE };
+    DockerSnapshot previous_docker = {0};
+    bool have_previous_docker = false;
+    double last_docker_attempt = 0;
+    double last_docker_success = 0;
     bool clear_screen = interactive;
     int rendered_width = 0;
     int rendered_height = 0;
@@ -73,6 +79,23 @@ int main(int argc, char **argv) {
         if (view == VIEW_NETWORKS || options.json_stream) {
             networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
                                         elapsed);
+        }
+        if (interactive && view == VIEW_DOCKER) {
+            double before_collection = now_seconds();
+            if (last_docker_attempt == 0 || before_collection - last_docker_attempt >= 2.0) {
+                DockerSnapshot collected = collect_docker_snapshot();
+                double sampled_at = now_seconds();
+                if (collected.status == METRIC_OK) {
+                    if (have_previous_docker)
+                        sample_docker_usage(&collected, &previous_docker,
+                                            sampled_at - last_docker_success);
+                    previous_docker = collected;
+                    have_previous_docker = true;
+                    last_docker_success = sampled_at;
+                }
+                docker = collected;
+                last_docker_attempt = sampled_at;
+            }
         }
         if (options.json) print_json(&current, cpu, &options);
         else if (options.json_stream) {
@@ -102,6 +125,9 @@ int main(int argc, char **argv) {
             }
             if (view == VIEW_USAGE) {
                 print_usage_screen(clear_screen, color);
+            }
+            else if (view == VIEW_DOCKER) {
+                print_docker_screen(&docker, clear_screen, color);
             }
             else if (view == VIEW_NETWORKS && options.compact) {
                 print_compact_network_screen(&networks, clear_screen, color);

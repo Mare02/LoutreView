@@ -57,10 +57,10 @@ void print_view_header(const char *view_name, int width, bool color) {
     if (width < 80) {
         printf("  /  %s\n", view_name);
         if (color) fputs(ANSI_DIM, stdout);
-        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("1:dashboard · 2:networks · 3:ai usage · 4:docker\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
+        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage · 4:docker\n", view_name);
     }
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = 0; i < width - 1; i++) fputs("─", stdout);
@@ -75,10 +75,10 @@ void print_compact_header(const char *view_name, int width, bool color) {
     if (width < 70) {
         printf("  /  %s\n", view_name);
         if (color) fputs(ANSI_DIM, stdout);
-        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("1:dashboard · 2:networks · 3:ai usage · 4:docker\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
+        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage · 4:docker\n", view_name);
     }
 }
 
@@ -108,9 +108,12 @@ static bool handle_input(View *current) {
             next = VIEW_NETWORKS;
         } else if (input[i] == '3' || input[i] == 'u' || input[i] == 'U') {
             next = VIEW_USAGE;
+        } else if (input[i] == '4') {
+            next = VIEW_DOCKER;
         } else if (input[i] == '\t') {
             next = *current == VIEW_DASHBOARD ? VIEW_NETWORKS :
-                   *current == VIEW_NETWORKS ? VIEW_USAGE : VIEW_DASHBOARD;
+                   *current == VIEW_NETWORKS ? VIEW_USAGE :
+                   *current == VIEW_USAGE ? VIEW_DOCKER : VIEW_DASHBOARD;
         }
         if (next != *current) {
             *current = next;

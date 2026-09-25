@@ -96,8 +96,14 @@ does not use the host build output or modify other containers.
 ```
 
 The interactive dashboard refreshes every second. Press `1` for the dashboard,
-`2` or `n` for network statistics, and `Tab` to switch between views. Press
-`Ctrl-C` to exit.
+`2` or `n` for network statistics, `3` or `u` for AI usage, and `4` for Docker.
+Press `Tab` to cycle through views. Press `Ctrl-C` to exit.
+
+The Docker view refreshes local Engine API snapshots every two seconds. It lists
+running container names and images with CPU, memory, and network rates. It uses
+the local Docker Unix socket, including the `DOCKER_HOST=unix://...` override;
+remote TCP and SSH endpoints are not supported. Docker data is only included in
+the interactive view, not `--json` or `--json-stream`.
 
 ## Install as a command
 
@@ -188,7 +194,7 @@ windows from the existing cache/live provider layer.
 ### Coding CLI usage
 
 Press `3` or `u` in the live dashboard to open the Coding CLI Usage view.
-Press `Tab` to cycle through the dashboard, network, and AI usage views. The
+Press `Tab` to cycle through the dashboard, network, AI usage, and Docker views. The
 AI usage view reads credential-free, machine-readable provider snapshots from the
 user state directory and shows available quota windows and reset times. It
 does not add usage data to `--json` output.

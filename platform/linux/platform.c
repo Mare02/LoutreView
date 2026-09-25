@@ -4,8 +4,35 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <unistd.h>
 
 const char *platform_name(void) { return "linux"; }
+
+size_t platform_docker_socket_paths(char paths[][DOCKER_SOCKET_PATH_MAX], size_t capacity) {
+    if (!paths || capacity == 0) return 0;
+    size_t count = 0;
+    const char *runtime = getenv("XDG_RUNTIME_DIR");
+    if (runtime && *runtime) {
+        int n = snprintf(paths[count], DOCKER_SOCKET_PATH_MAX, "%s/docker.sock", runtime);
+        if (n > 0 && (size_t)n < DOCKER_SOCKET_PATH_MAX) count++;
+    }
+    if (count < capacity) {
+        int n = snprintf(paths[count], DOCKER_SOCKET_PATH_MAX, "/run/user/%lu/docker.sock",
+                         (unsigned long)getuid());
+        if (n > 0 && (size_t)n < DOCKER_SOCKET_PATH_MAX) count++;
+    }
+    if (count < capacity) {
+        snprintf(paths[count++], DOCKER_SOCKET_PATH_MAX, "/var/run/docker.sock");
+    }
+    const char *home = getenv("HOME");
+    if (count < capacity && home && *home) {
+        int n = snprintf(paths[count], DOCKER_SOCKET_PATH_MAX,
+                         "%s/.docker/desktop/docker.sock", home);
+        if (n > 0 && (size_t)n < DOCKER_SOCKET_PATH_MAX) count++;
+    }
+    return count;
+}
 
 MetricStatus linux_errno_status(void) {
     if (errno == EACCES || errno == EPERM) return METRIC_PERMISSION;

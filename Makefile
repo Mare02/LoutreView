@@ -15,11 +15,12 @@ ifeq ($(origin CC),default)
 CC := cc
 endif
 CFLAGS ?= -O2
+THREAD_FLAGS := -pthread
 TARGET ?= loutre-view
 STRICT_FLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror
 INCLUDE_FLAGS := -Iinclude
 # Compiler and flag changes must never reuse incompatible objects.
-CONFIG := $(shell printf '%s\n' "$(CC)" "$(CPPFLAGS)" "$(PLATFORM_CPPFLAGS)" "$(CFLAGS)" "$(LDFLAGS)" "$(LDLIBS)" "$(STRICT_FLAGS)" "$(INCLUDE_FLAGS)" | cksum | awk '{print $$1}')
+CONFIG := $(shell printf '%s\n' "$(CC)" "$(CPPFLAGS)" "$(PLATFORM_CPPFLAGS)" "$(THREAD_FLAGS)" "$(CFLAGS)" "$(LDFLAGS)" "$(LDLIBS)" "$(STRICT_FLAGS)" "$(INCLUDE_FLAGS)" | cksum | awk '{print $$1}')
 BUILD_DIR := build/$(OS)/$(CONFIG)
 SOURCES := $(sort $(wildcard src/*.c src/ui/*.c src/usage/*.c src/providers/*.c platform/common/*.c platform/$(PLATFORM)/*.c))
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
@@ -34,15 +35,15 @@ build: $(TARGET)
 # Relink when returning to a previously built configuration or TARGET path.
 $(TARGET): $(OBJECTS) FORCE
 	@mkdir -p "$(dir $(TARGET))"
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o "$@" $(LDLIBS) $(PLATFORM_LIBS)
+	$(CC) $(THREAD_FLAGS) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o "$@" $(LDLIBS) $(PLATFORM_LIBS)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p "$(@D)"
-	$(CC) $(INCLUDE_FLAGS) $(PLATFORM_CPPFLAGS) $(CPPFLAGS) $(STRICT_FLAGS) $(CFLAGS) -MMD -MP -c "$<" -o "$@"
+	$(CC) $(THREAD_FLAGS) $(INCLUDE_FLAGS) $(PLATFORM_CPPFLAGS) $(CPPFLAGS) $(STRICT_FLAGS) $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 
 $(BUILD_DIR)/tests/%: tests/%.c $(LIB_OBJECTS)
 	@mkdir -p "$(@D)"
-	$(CC) $(INCLUDE_FLAGS) $(PLATFORM_CPPFLAGS) $(CPPFLAGS) $(STRICT_FLAGS) $(CFLAGS) -MMD -MP -MF "$@.d" $(LDFLAGS) "$<" $(LIB_OBJECTS) -o "$@" $(LDLIBS) $(PLATFORM_LIBS)
+	$(CC) $(THREAD_FLAGS) $(INCLUDE_FLAGS) $(PLATFORM_CPPFLAGS) $(CPPFLAGS) $(STRICT_FLAGS) $(CFLAGS) -MMD -MP -MF "$@.d" $(LDFLAGS) "$<" $(LIB_OBJECTS) -o "$@" $(LDLIBS) $(PLATFORM_LIBS)
 
 test: $(TARGET) $(TEST_BINS)
 	@set -e; for test_bin in $(TEST_BINS); do "$$test_bin"; done

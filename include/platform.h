@@ -13,6 +13,7 @@ bool platform_battery(BatteryInfo *out);
 ProcessList platform_processes(void);
 NetworkSnapshot platform_networks(void);
 StartupList platform_startup(void);
+size_t platform_docker_socket_paths(char paths[][DOCKER_SOCKET_PATH_MAX], size_t capacity);
 
 /* Shared POSIX disk implementation. */
 MetricStatus platform_disk(SystemMetrics *out);
