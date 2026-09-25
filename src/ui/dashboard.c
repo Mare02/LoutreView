@@ -12,13 +12,15 @@
 #include <unistd.h>
 #include <math.h>
 
+enum { PROCESS_MEMORY_WIDTH = 9 };
+
 static void print_core_grid(const double *cores, size_t count, const TerminalLayout *layout,
                             bool color) {
     int columns = layout->dashboard_core_columns;
     const int meter_width = 6;
 
     putchar('\n');
-    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("CPU CORES", stdout);
     if (count == 0) fputs("  n/a", stdout);
     if (color) fputs(ANSI_RESET, stdout);
@@ -51,22 +53,59 @@ static void print_process_name(const char *name, int width) {
     }
 }
 
-static void print_compact_process_header(bool color) {
+static void print_process_cpu(double cpu_percent) {
+    char value[32];
+    if (isfinite(cpu_percent)) snprintf(value, sizeof(value), "%.1f", cpu_percent);
+    else snprintf(value, sizeof(value), "n/a");
+    printf("%-5s", value);
+}
+
+static void print_compact_process_header(bool show_memory, bool color) {
+    if (color) fputs(ANSI_SLATE ANSI_BOLD, stdout);
+    printf("  %-5s", "PID");
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
+    printf("%-5s", "CPU%");
+    if (color) fputs(ANSI_RESET, stdout);
+    if (show_memory) {
+        printf("  ");
+        if (color) fputs(ANSI_SAND ANSI_BOLD, stdout);
+        printf("%-*s", PROCESS_MEMORY_WIDTH, "MEM");
+        if (color) fputs(ANSI_RESET, stdout);
+        printf("  ");
+        if (color) fputs(ANSI_CLAY ANSI_BOLD, stdout);
+        printf("%-3s", "THR");
+        if (color) fputs(ANSI_RESET, stdout);
+    }
+    printf("  ");
     if (color) fputs(ANSI_BOLD, stdout);
-    printf("  %-5s  %5s  %6s  %3s  %s", "PID", "CPU%", "MEM", "THR", "PROCESS");
+    fputs("PROCESS", stdout);
     if (color) fputs(ANSI_RESET, stdout);
 }
 
-static void print_compact_process_row(const Process *process, int name_width, bool color) {
+static void print_compact_process_row(const Process *process, int name_width,
+                                      bool show_memory, bool color) {
     char resident[16];
-    const char *process_color = process->cpu_percent >= 70.0 ? ANSI_RED :
-                                process->cpu_percent >= 25.0 ? ANSI_AMBER : ANSI_RESET;
     format_compact_bytes(process->resident, resident, sizeof(resident));
-    printf("  %-5d  ", process->pid);
-    if (color) fputs(process_color, stdout);
-    print_percent(process->cpu_percent, 5, 1, false);
+    if (color) fputs(ANSI_SLATE, stdout);
+    printf("  %-5d", process->pid);
     if (color) fputs(ANSI_RESET, stdout);
-    printf("  %6s  %3d  ", resident, process->threads);
+    printf("  ");
+    if (color) fputs(ANSI_BRAND, stdout);
+    print_process_cpu(process->cpu_percent);
+    if (color) fputs(ANSI_RESET, stdout);
+    if (show_memory) {
+        printf("  ");
+        if (color) fputs(ANSI_SAND, stdout);
+        printf("%-*s", PROCESS_MEMORY_WIDTH, resident);
+        if (color) fputs(ANSI_RESET, stdout);
+        printf("  ");
+        if (color) fputs(ANSI_CLAY, stdout);
+        printf("%-3d", process->threads);
+        if (color) fputs(ANSI_RESET, stdout);
+    }
+    printf("  ");
     print_process_name(process->name, name_width);
 }
 
@@ -84,12 +123,12 @@ static void print_wide_short_panel(const Snapshot *snapshot, const double *cores
     const int core_panel_width = core_columns == 1 ? 22 : 48;
     const int left_width = core_columns == 1 ? 26 : 50;
     const size_t core_rows = (core_count + (size_t)core_columns - 1) / (size_t)core_columns;
-    const int name_width = width - left_width - 29;
+    const int name_width = width - left_width - 32;
     const size_t process_count = snapshot->processes.count < (size_t)process_rows ?
                                  snapshot->processes.count : (size_t)process_rows;
 
     putchar('\n');
-    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("CPU CORES", stdout);
     if (color) fputs(ANSI_RESET, stdout);
     print_spaces(left_width - 9);
@@ -110,10 +149,10 @@ static void print_wide_short_panel(const Snapshot *snapshot, const double *cores
         print_spaces(left_width - core_panel_width);
 
         if (row == 0) {
-            print_compact_process_header(color);
+            print_compact_process_header(true, color);
         } else if (row - 1 < process_count) {
             const Process *process = &snapshot->processes.items[row - 1];
-            print_compact_process_row(process, name_width, color);
+            print_compact_process_row(process, name_width, true, color);
         }
         putchar('\n');
     }
@@ -154,41 +193,41 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
     print_compact_header("DASHBOARD", layout->width, color);
 
     if (layout->compact_pressure) {
-        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        print_compact_metric_label("CPU", ANSI_BRAND, color);
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
-        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        print_compact_metric_label("MEM", ANSI_BRAND, color);
         printf(" %s/%s  ", memory_used, memory_total);
-        print_compact_metric_label("DISK", ANSI_CYAN, color);
+        print_compact_metric_label("DISK", ANSI_BRAND, color);
         printf(" %s/%s", disk_used, disk_total);
         if (metrics.battery.available) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_CYAN, color);
+            print_compact_metric_label("BAT", ANSI_BRAND, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
     } else if (layout->compact_full_metrics) {
-        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        print_compact_metric_label("CPU", ANSI_BRAND, color);
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
-        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        print_compact_metric_label("MEM", ANSI_BRAND, color);
         printf(" %s/%s  ", memory_used, memory_total);
-        print_compact_metric_label("DISK", ANSI_CYAN, color);
+        print_compact_metric_label("DISK", ANSI_BRAND, color);
         printf(" %s/%s", disk_used, disk_total);
         if (metrics.battery.available && layout->compact_battery) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_CYAN, color);
+            print_compact_metric_label("BAT", ANSI_BRAND, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
     } else {
-        print_compact_metric_label("CPU", ANSI_CYAN, color);
+        print_compact_metric_label("CPU", ANSI_BRAND, color);
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
-        print_compact_metric_label("MEM", ANSI_TEAL, color);
+        print_compact_metric_label("MEM", ANSI_BRAND, color);
         putchar(' '); print_percent(memory_percent, 0, 0, true); fputs("  ", stdout);
-        print_compact_metric_label("DISK", ANSI_CYAN, color);
+        print_compact_metric_label("DISK", ANSI_BRAND, color);
         putchar(' '); print_percent(disk_percent, 0, 0, true);
         if (metrics.battery.available) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_CYAN, color);
+            print_compact_metric_label("BAT", ANSI_BRAND, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
@@ -200,31 +239,15 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
     putchar('\n');
 
     bool show_memory = layout->compact_process_memory;
-    if (show_memory) print_compact_process_header(color);
-    else {
-        if (color) fputs(ANSI_BOLD, stdout);
-        printf("  %-5s  %5s  %s", "PID", "CPU%", "PROCESS");
-        if (color) fputs(ANSI_RESET, stdout);
-    }
+    print_compact_process_header(show_memory, color);
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
     size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
-    int name_width = layout->width - (show_memory ? 29 : 17);
+    int name_width = layout->width - (show_memory ? 32 : 17);
     if (name_width < 1) name_width = 1;
     for (size_t i = 0; i < count; i++) {
         const Process *process = &snapshot->processes.items[i];
-        if (show_memory) {
-            print_compact_process_row(process, name_width, color);
-        } else {
-            const char *process_color = process->cpu_percent >= 70.0 ? ANSI_RED :
-                                        process->cpu_percent >= 25.0 ? ANSI_AMBER : ANSI_RESET;
-            printf("  %-5d  ", process->pid);
-            if (color) fputs(process_color, stdout);
-            print_percent(process->cpu_percent, 5, 1, false);
-            if (color) fputs(ANSI_RESET, stdout);
-            fputs("  ", stdout);
-            print_process_name(process->name, name_width);
-        }
+        print_compact_process_row(process, name_width, show_memory, color);
         putchar('\n');
     }
     fflush(stdout);
@@ -256,27 +279,27 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
 
     print_view_header("DASHBOARD", layout->width, color);
 
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("CPU  ", stdout); print_percent(cpu, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(cpu, layout->dashboard_bar_width, color);
     if (metrics.load_status == METRIC_OK) printf("  Load %.2f · %.2f · %.2f\n", metrics.loads[0], metrics.loads[1], metrics.loads[2]); else puts("  Load n/a");
 
-    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("MEM  ", stdout); print_percent(memory_percent, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(memory_percent, layout->dashboard_bar_width, color);
     printf("  %s / %s  %spressure %s%s\n", memory_used_text, memory_total_text,
            color ? ANSI_DIM : "", pressure_text, color ? ANSI_RESET : "");
 
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("DISK ", stdout); print_percent(disk_percent, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(disk_percent, layout->dashboard_bar_width, color);
     printf("  %s / %s  %suptime %s%s\n", disk_used_text, disk_total_text,
            color ? ANSI_DIM : "", uptime, color ? ANSI_RESET : "");
     if (metrics.battery.available) {
-        if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+        if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
         printf("BAT  %5d%% ", metrics.battery.percent);
         if (color) fputs(ANSI_RESET, stdout);
         print_battery_bar((double)metrics.battery.percent, layout->dashboard_bar_width, color);
@@ -302,27 +325,70 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
 
     print_core_grid(core_usage, core_count, layout, color);
 
+    if (color) fputs(ANSI_SLATE ANSI_BOLD, stdout);
+    printf("%-5s", "PID");
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
+    printf("%-5s", "CPU%");
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_SAND ANSI_BOLD, stdout);
+    printf("%-*s", PROCESS_MEMORY_WIDTH, "MEM");
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_CLAY ANSI_BOLD, stdout);
+    printf("%-3s", "THR");
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
     if (color) fputs(ANSI_BOLD, stdout);
-    printf("  PID    CPU%%     MEM  THR  PROCESS");
+    fputs("PROCESS", stdout);
     if (color) fputs(ANSI_RESET, stdout);
     printf("  %s(sorted by %s)%s\n", color ? ANSI_DIM : "", sort_name(options->sort),
            color ? ANSI_RESET : "");
     if (color) fputs(ANSI_SLATE, stdout);
-    printf("  ─────  ─────  ──────  ───  ");
-    for (int i = 0; i < layout->width - 33; i++) fputs("─", stdout);
+    fputs("─────", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_BRAND, stdout);
+    fputs("─────", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_SAND, stdout);
+    for (int i = 0; i < PROCESS_MEMORY_WIDTH; i++) fputs("─", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_CLAY, stdout);
+    fputs("───", stdout);
+    if (color) fputs(ANSI_RESET, stdout);
+    printf("  ");
+    if (color) fputs(ANSI_TAUPE, stdout);
+    for (int i = 0; i < layout->width - (PROCESS_MEMORY_WIDTH + 25); i++) fputs("─", stdout);
     if (color) fputs(ANSI_RESET, stdout);
     putchar('\n');
-    if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
+    if (snapshot->processes.status != METRIC_OK) puts("Processes n/a");
     size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
     for (size_t i = 0; i < count; i++) {
         const Process *p = &snapshot->processes.items[i];
         char resident[24]; format_bytes(p->resident, resident, sizeof(resident));
-        const char *process_color = p->cpu_percent >= 70.0 ? ANSI_RED : p->cpu_percent >= 25.0 ? ANSI_AMBER : ANSI_RESET;
-        printf("  %-5d  ", p->pid);
-        if (color) fputs(process_color, stdout);
-        print_percent(p->cpu_percent, 5, 1, false);
+        if (color) fputs(ANSI_SLATE, stdout);
+        printf("%-5d", p->pid);
         if (color) fputs(ANSI_RESET, stdout);
-        printf("  %6s  %3d  ", resident, p->threads); print_safe_text(p->name, 48); putchar('\n');
+        printf("  ");
+        if (color) fputs(ANSI_BRAND, stdout);
+        print_process_cpu(p->cpu_percent);
+        if (color) fputs(ANSI_RESET, stdout);
+        printf("  ");
+        if (color) fputs(ANSI_SAND, stdout);
+        printf("%-*s", PROCESS_MEMORY_WIDTH, resident);
+        if (color) fputs(ANSI_RESET, stdout);
+        printf("  ");
+        if (color) fputs(ANSI_CLAY, stdout);
+        printf("%-3d", p->threads);
+        if (color) fputs(ANSI_RESET, stdout);
+        printf("  ");
+        print_safe_text(p->name, 48);
+        putchar('\n');
     }
     fflush(stdout);
 }

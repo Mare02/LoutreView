@@ -51,7 +51,7 @@ bool configure_terminal(void) {
 }
 
 void print_view_header(const char *view_name, int width, bool color) {
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 80) {
@@ -69,7 +69,7 @@ void print_view_header(const char *view_name, int width, bool color) {
 }
 
 void print_compact_header(const char *view_name, int width, bool color) {
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 70) {

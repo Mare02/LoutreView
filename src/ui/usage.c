@@ -45,7 +45,7 @@ void print_usage_screen(bool clear, bool color) {
     }
     for (size_t i = 0; i < snapshot.count; i++) {
         const ProviderUsage *usage = &snapshot.providers[i];
-        if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+        if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
         printf("\n%s\n", usage->provider);
         if (color) fputs(ANSI_RESET, stdout);
         if (!usage || !usage->available || usage->window_count == 0) {

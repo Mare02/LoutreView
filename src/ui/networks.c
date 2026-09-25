@@ -60,7 +60,7 @@ void print_network_screen(const NetworkSnapshot *snapshot, const Options *option
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
     print_view_header("NETWORKS", width, color);
 
-    if (color) fputs(ANSI_TEAL ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     printf("  TRAFFIC  %zu active · %zu total    ↓ RX %s/s    ↑ TX %s/s\n",
            active_count, snapshot->count, receive_total, transmit_total);
     if (color) fputs(ANSI_RESET ANSI_SLATE, stdout);

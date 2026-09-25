@@ -43,7 +43,7 @@ void print_startup_report(const Options *options) {
     }
 
     bool color = isatty(STDOUT_FILENO);
-    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
     printf("LOUTREVIEW  /  STARTUP\n");
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     printf("%zu configured items · %s%s\n\n", list.count, metric_status_name(list.status), list.partial ? " (partial)" : "");
