@@ -154,14 +154,22 @@ const char *status_color(double percent, bool color) {
     return ANSI_GREEN;
 }
 
-void print_bar(double percent, int width, bool color) {
+static void print_colored_bar(double percent, int width, bool color, bool reverse_thresholds) {
     if (!isfinite(percent)) { printf("%*s", width, "n/a"); return; }
     int filled = (int)((percent / 100.0) * width + 0.5);
     if (filled < 0) filled = 0;
     if (filled > width) filled = width;
-    fputs(status_color(percent, color), stdout);
+    fputs(status_color(reverse_thresholds ? 100.0 - percent : percent, color), stdout);
     for (int i = 0; i < filled; i++) fputs("█", stdout);
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = filled; i < width; i++) fputs("░", stdout);
     if (color) fputs(ANSI_RESET, stdout);
+}
+
+void print_bar(double percent, int width, bool color) {
+    print_colored_bar(percent, width, color, false);
+}
+
+void print_battery_bar(double percent, int width, bool color) {
+    print_colored_bar(percent, width, color, true);
 }

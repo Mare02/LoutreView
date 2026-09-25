@@ -158,11 +158,11 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("MEM", ANSI_TEAL, color);
         printf(" %s/%s  ", memory_used, memory_total);
-        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        print_compact_metric_label("DISK", ANSI_CYAN, color);
         printf(" %s/%s", disk_used, disk_total);
         if (metrics.battery.available) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            print_compact_metric_label("BAT", ANSI_CYAN, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
@@ -171,11 +171,11 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("MEM", ANSI_TEAL, color);
         printf(" %s/%s  ", memory_used, memory_total);
-        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        print_compact_metric_label("DISK", ANSI_CYAN, color);
         printf(" %s/%s", disk_used, disk_total);
         if (metrics.battery.available && layout->compact_battery) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            print_compact_metric_label("BAT", ANSI_CYAN, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
@@ -184,11 +184,11 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
         putchar(' '); print_percent(cpu, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("MEM", ANSI_TEAL, color);
         putchar(' '); print_percent(memory_percent, 0, 0, true); fputs("  ", stdout);
-        print_compact_metric_label("DISK", ANSI_AMBER, color);
+        print_compact_metric_label("DISK", ANSI_CYAN, color);
         putchar(' '); print_percent(disk_percent, 0, 0, true);
         if (metrics.battery.available) {
             printf("  ");
-            print_compact_metric_label("BAT", ANSI_AMBER, color);
+            print_compact_metric_label("BAT", ANSI_CYAN, color);
             printf(" %d%%", metrics.battery.percent);
         }
         putchar('\n');
@@ -269,17 +269,17 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
     printf("  %s / %s  %spressure %s%s\n", memory_used_text, memory_total_text,
            color ? ANSI_DIM : "", pressure_text, color ? ANSI_RESET : "");
 
-    if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
     fputs("DISK ", stdout); print_percent(disk_percent, 5, 1, true); putchar(' ');
     if (color) fputs(ANSI_RESET, stdout);
     print_bar(disk_percent, layout->dashboard_bar_width, color);
     printf("  %s / %s  %suptime %s%s\n", disk_used_text, disk_total_text,
            color ? ANSI_DIM : "", uptime, color ? ANSI_RESET : "");
     if (metrics.battery.available) {
-        if (color) fputs(ANSI_AMBER ANSI_BOLD, stdout);
+        if (color) fputs(ANSI_CYAN ANSI_BOLD, stdout);
         printf("BAT  %5d%% ", metrics.battery.percent);
         if (color) fputs(ANSI_RESET, stdout);
-        print_bar((double)metrics.battery.percent, layout->dashboard_bar_width, color);
+        print_battery_bar((double)metrics.battery.percent, layout->dashboard_bar_width, color);
         printf("  %s", metrics.battery.state);
         if (metrics.battery.time_remaining_minutes >= 0) {
             char battery_time[24];

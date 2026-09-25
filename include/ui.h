@@ -30,6 +30,7 @@ int terminal_width(void);
 int terminal_height(void);
 const char *status_color(double percent, bool color);
 void print_bar(double percent, int width, bool color);
+void print_battery_bar(double percent, int width, bool color);
 void print_view_header(const char *view_name, int width, bool color);
 void print_compact_header(const char *view_name, int width, bool color);
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options, bool clear, bool color);
