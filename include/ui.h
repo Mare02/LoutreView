@@ -13,6 +13,7 @@
 #define ANSI_SLATE "\033[38;5;246m"
 #define ANSI_TAUPE "\033[38;5;137m"
 #define ANSI_BRAND "\033[38;5;173m"
+#define ANSI_BRAND_BRIGHT "\033[38;5;215m"
 #define ANSI_SAND "\033[38;5;180m"
 #define ANSI_CLAY "\033[38;5;210m"
 #define ANSI_ALT_SCREEN "\033[?1049h"

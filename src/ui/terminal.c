@@ -51,16 +51,20 @@ bool configure_terminal(void) {
 }
 
 void print_view_header(const char *view_name, int width, bool color) {
-    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
+    fputs("  /  ", stdout);
+    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
+    fputs(view_name, stdout);
+    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 80) {
-        printf("  /  %s\n", view_name);
+        putchar('\n');
         if (color) fputs(ANSI_DIM, stdout);
         fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
+        fputs("   1:dashboard · 2:networks · 3:ai usage\n", stdout);
     }
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = 0; i < width - 1; i++) fputs("─", stdout);
@@ -69,16 +73,20 @@ void print_view_header(const char *view_name, int width, bool color) {
 }
 
 void print_compact_header(const char *view_name, int width, bool color) {
-    if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
+    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
+    fputs("  /  ", stdout);
+    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
+    fputs(view_name, stdout);
+    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 70) {
-        printf("  /  %s\n", view_name);
+        putchar('\n');
         if (color) fputs(ANSI_DIM, stdout);
         fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        printf("  /  %s   1:dashboard · 2:networks · 3:ai usage\n", view_name);
+        fputs("   1:dashboard · 2:networks · 3:ai usage\n", stdout);
     }
 }
 
