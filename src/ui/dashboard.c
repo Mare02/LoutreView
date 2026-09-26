@@ -14,6 +14,27 @@
 
 enum { PROCESS_MEMORY_WIDTH = 9 };
 
+static size_t dashboard_process_count(const ProcessList *processes, const Options *options,
+                                      size_t row_limit) {
+    size_t limit = row_limit;
+    if (options->limit_explicit && limit > (size_t)options->limit)
+        limit = (size_t)options->limit;
+    return processes->count < limit ? processes->count : limit;
+}
+
+static size_t dashboard_process_limit(const ProcessList *processes, const Options *options,
+                                      int height, int row_limit) {
+    if (height <= 0) return dashboard_process_count(processes, options, (size_t)options->limit);
+    return dashboard_process_count(processes, options,
+                                   row_limit > 0 ? (size_t)row_limit : 0);
+}
+
+static int dashboard_side_process_rows(const TerminalLayout *layout) {
+    int header_rows = layout->width < 80 ? 3 : 2;
+    int rows = layout->height - header_rows - 8;
+    return rows > 0 ? rows : 0;
+}
+
 static void print_core_grid(const double *cores, size_t count, const TerminalLayout *layout,
                             bool color) {
     int columns = layout->dashboard_core_columns;
@@ -242,7 +263,11 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
     print_compact_process_header(show_memory, color);
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
-    size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
+    int compact_header_rows = layout->width < 84 ? 2 : 1;
+    int compact_fixed_rows = compact_header_rows + 3;
+    int compact_process_rows = layout->height - compact_fixed_rows - 1;
+    size_t count = dashboard_process_limit(&snapshot->processes, options, layout->height,
+                                           compact_process_rows);
     int name_width = layout->width - (show_memory ? 32 : 17);
     if (name_width < 1) name_width = 1;
     for (size_t i = 0; i < count; i++) {
@@ -312,16 +337,28 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
         putchar('\n');
     }
 
-    size_t process_count = snapshot->processes.count < (size_t)options->limit ?
-                           snapshot->processes.count : (size_t)options->limit;
+    size_t side_panel_process_count = options->limit_explicit ?
+        dashboard_process_count(&snapshot->processes, options, (size_t)options->limit) : 0;
+    size_t process_count;
     if (!metrics.battery.available) puts("BAT    n/a");
-    if (layout_uses_dashboard_side_panel(layout, core_count, process_count)) {
+    if (layout_uses_dashboard_side_panel(layout, core_count, side_panel_process_count)) {
+        int process_rows = dashboard_side_process_rows(layout);
+        if (options->limit_explicit && process_rows > options->limit)
+            process_rows = options->limit;
         print_wide_short_panel(snapshot, core_usage, core_count, layout->width,
                                layout->dashboard_side_core_columns,
-                               layout_dashboard_side_process_rows(layout), color);
+                               process_rows, color);
         fflush(stdout);
         return;
     }
+
+    int header_rows = layout->width < 80 ? 3 : 2;
+    size_t standard_core_rows = (core_count + (size_t)layout->dashboard_core_columns - 1) /
+                                (size_t)layout->dashboard_core_columns;
+    int fixed_rows = header_rows + 4 + (int)standard_core_rows + 5;
+    int process_rows = layout->height - fixed_rows - 1;
+    process_count = dashboard_process_limit(&snapshot->processes, options, layout->height,
+                                            process_rows);
 
     print_core_grid(core_usage, core_count, layout, color);
 
@@ -367,7 +404,7 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
     if (color) fputs(ANSI_RESET, stdout);
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("Processes n/a");
-    size_t count = snapshot->processes.count < (size_t)options->limit ? snapshot->processes.count : (size_t)options->limit;
+    size_t count = process_count;
     for (size_t i = 0; i < count; i++) {
         const Process *p = &snapshot->processes.items[i];
         char resident[24]; format_bytes(p->resident, resident, sizeof(resident));

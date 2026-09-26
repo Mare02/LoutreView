@@ -128,11 +128,13 @@ UsageSnapshot collect_usage(void) {
         bool live = false;
         if (provider->kind == USAGE_PROVIDER_CODEX) {
             time_t now = time(NULL);
-            if (!codex_live_attempted || now - codex_live_collected_at >= 30) {
+            time_t retry_after = codex_live_usage.available ? 30 : 5;
+            if (!codex_live_attempted || now - codex_live_collected_at >= retry_after) {
                 codex_live_attempted = true;
                 codex_live_collected_at = now;
-                codex_live_usage.available = false;
-                codex_usage_collect(&codex_live_usage);
+                ProviderUsage updated;
+                usage_init(&updated, provider->name);
+                if (codex_usage_collect(&updated)) codex_live_usage = updated;
             }
             if (codex_live_usage.available) {
                 usage = codex_live_usage;

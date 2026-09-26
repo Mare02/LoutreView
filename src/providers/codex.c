@@ -1,6 +1,7 @@
 #include "usage_provider.h"
 #include "../usage/usage_json.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +48,11 @@ static bool read_app_server(char *output, size_t capacity) {
     if (child == 0) {
         dup2(input_pipe[0], STDIN_FILENO);
         dup2(output_pipe[1], STDOUT_FILENO);
+        int null_fd = open("/dev/null", O_WRONLY);
+        if (null_fd >= 0) {
+            dup2(null_fd, STDERR_FILENO);
+            if (null_fd != STDERR_FILENO) close(null_fd);
+        }
         close(input_pipe[0]); close(input_pipe[1]);
         close(output_pipe[0]); close(output_pipe[1]);
         execlp("codex", "codex", "app-server", "--stdio", (char *)NULL);

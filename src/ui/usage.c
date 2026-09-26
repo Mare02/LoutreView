@@ -36,10 +36,12 @@ static void print_window(const UsageWindow *window, bool color) {
 
 void print_usage_screen(bool clear, bool color) {
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
+    else fputs(ANSI_HOME ANSI_ERASE_TO_END, stdout);
     print_compact_header("AI USAGE", terminal_width(), color);
     UsageSnapshot snapshot = collect_usage();
     if (snapshot.count == 0) {
         puts("\n  No installed AI CLI providers detected");
+        fputs(ANSI_ERASE_TO_END, stdout);
         fflush(stdout);
         return;
     }
@@ -55,5 +57,6 @@ void print_usage_screen(bool clear, bool color) {
         for (size_t window = 0; window < usage->window_count; window++)
             print_window(&usage->windows[window], color);
     }
+    fputs(ANSI_ERASE_TO_END, stdout);
     fflush(stdout);
 }

@@ -72,6 +72,7 @@ int parse_args(int argc, char **argv, Options *options) {
         }
         if (!strcmp(arg, "-n") || !strcmp(arg, "--limit")) {
             if (++i >= argc || !parse_positive(argv[i], 1, &options->limit)) return -1;
+            options->limit_explicit = true;
             continue;
         }
         if (!strcmp(arg, "-s") || !strcmp(arg, "--sort")) {
