@@ -56,6 +56,7 @@ int main(int argc, char **argv) {
         fflush(stdout);
     }
     View view = VIEW_DASHBOARD;
+    ProcessViewState process_view = { .sort = options.sort };
     NetworkSnapshot previous_networks = {0};
     bool have_previous_networks = false;
     bool clear_screen = interactive;
@@ -65,7 +66,8 @@ int main(int argc, char **argv) {
     while (running) {
         Snapshot current = collect_snapshot(&previous);
         double elapsed = current.timestamp - previous.timestamp;
-        sort_processes(&current.processes, options.sort);
+        sort_processes(&current.processes,
+                       view == VIEW_PROCESSES ? process_view.sort : options.sort);
         double cpu = sample_cpu_usage(&previous, &current);
         double core_usage[MAX_CPU_CORES] = {0};
         size_t core_count = sample_core_usage(&previous, &current, core_usage);
@@ -109,6 +111,9 @@ int main(int argc, char **argv) {
             else if (view == VIEW_NETWORKS) {
                 print_network_screen(&networks, &options, clear_screen, color);
             }
+            else if (view == VIEW_PROCESSES) {
+                print_process_screen(&current.processes, &process_view, clear_screen, color);
+            }
             else if (options.compact) {
                 render_compact_dashboard(&current, cpu, &options, &layout, clear_screen, color);
             }
@@ -136,7 +141,7 @@ int main(int argc, char **argv) {
         if (options.once) break;
         if (interactive) {
             View old_view = view;
-            if (!wait_for_input(&view, options.interval_ms)) break;
+            if (!wait_for_input(&view, &process_view, options.interval_ms)) break;
             clear_screen = view != old_view;
         }
         else {

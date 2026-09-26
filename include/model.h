@@ -14,8 +14,14 @@
 #define MIN_INTERVAL_MS 250
 
 typedef enum { METRIC_OK, METRIC_UNAVAILABLE, METRIC_PERMISSION, METRIC_ERROR } MetricStatus;
-typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME } SortMode;
-typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE } View;
+typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME, SORT_THREADS } SortMode;
+typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE, VIEW_PROCESSES } View;
+typedef struct {
+    SortMode sort;
+    char filter[128];
+    bool filtering;
+    size_t offset;
+} ProcessViewState;
 /* Backend-normalized cumulative counters. Busy includes steal and IRQ on Linux;
  * idle includes iowait. Guest time is already included in user/nice. */
 typedef struct { unsigned long long user, system, idle, nice; } CpuTicks;

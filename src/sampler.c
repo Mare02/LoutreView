@@ -42,12 +42,18 @@ static int compare_pid(const void *a, const void *b) {
 static int compare_name(const void *a, const void *b) {
     return strcasecmp(((const Process *)a)->name, ((const Process *)b)->name);
 }
+static int compare_threads(const void *a, const void *b) {
+    const Process *left = a, *right = b;
+    if (left->threads != right->threads) return (right->threads > left->threads) - (right->threads < left->threads);
+    return (left->pid > right->pid) - (left->pid < right->pid);
+}
 
 void sort_processes(ProcessList *list, SortMode sort) {
     int (*compare)(const void *, const void *) = compare_cpu;
     if (sort == SORT_MEM) compare = compare_mem;
     else if (sort == SORT_PID) compare = compare_pid;
     else if (sort == SORT_NAME) compare = compare_name;
+    else if (sort == SORT_THREADS) compare = compare_threads;
     if (list->count > 1) qsort(list->items, list->count, sizeof(Process), compare);
 }
 

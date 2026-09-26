@@ -123,7 +123,7 @@ for item in startup["items"]:
     assert item["enabled"] in (True, False, None)
 
 
-def terminal_session(compact=False, usage=False):
+def terminal_session(compact=False, view_key=b"3", view_name=b"NETWORKS"):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 110, 0, 0))
     original = termios.tcgetattr(slave)
@@ -148,7 +148,7 @@ def terminal_session(compact=False, usage=False):
 
     try:
         collect(.7)
-        os.write(master, b"3" if usage else b"2")
+        os.write(master, view_key)
         collect(.7)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 20, 60, 0, 0))
         collect(.35)
@@ -159,7 +159,7 @@ def terminal_session(compact=False, usage=False):
         assert child.wait(timeout=5) == 0
         assert termios.tcgetattr(slave) == original, "Terminal state was not restored"
         output = b"".join(chunks)
-        assert (b"AI USAGE" if usage else b"NETWORKS") in output and b"LOUTREVIEW" in output
+        assert view_name in output and b"LOUTREVIEW" in output
         assert b"\x1b[?1049l" in output and b"\x1b[?25h" in output
     finally:
         if child.poll() is None:
@@ -171,5 +171,6 @@ def terminal_session(compact=False, usage=False):
 
 terminal_session()
 terminal_session(compact=True)
-terminal_session(usage=True)
+terminal_session(view_key=b"2", view_name=b"PROCESSES")
+terminal_session(view_key=b"4", view_name=b"AI USAGE")
 print("CLI, JSON, live metrics and terminal smoke tests passed")

@@ -60,11 +60,10 @@ void print_view_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 80) {
         putchar('\n');
-        if (color) fputs(ANSI_DIM, stdout);
-        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        fputs("   1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("   1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
     }
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = 0; i < width - 1; i++) fputs("─", stdout);
@@ -80,17 +79,16 @@ void print_compact_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
     fputs(view_name, stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
-    if (width < 70) {
+    if (width < 84) {
         putchar('\n');
-        if (color) fputs(ANSI_DIM, stdout);
-        fputs("1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {
-        fputs("   1:dashboard · 2:networks · 3:ai usage\n", stdout);
+        fputs("   1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
     }
 }
 
-static bool handle_input(View *current) {
+static bool handle_input(View *current, ProcessViewState *process_view) {
     unsigned char input[32];
     ssize_t received = read(STDIN_FILENO, input, sizeof(input));
     if (received <= 0) return false;
@@ -98,26 +96,88 @@ static bool handle_input(View *current) {
     bool changed = false;
     for (ssize_t i = 0; i < received; i++) {
         if (escape_state == 1) {
-            escape_state = input[i] == '[' ? 2 : 0;
-            continue;
+            if (input[i] == '[') {
+                escape_state = 2;
+                continue;
+            }
+            escape_state = 0;
         }
         if (escape_state == 2) {
             if (input[i] >= 0x40 && input[i] <= 0x7e) escape_state = 0;
             continue;
         }
         if (input[i] == '\033') {
+            if (*current == VIEW_PROCESSES && process_view->filtering) {
+                process_view->filtering = false;
+                changed = true;
+            }
             escape_state = 1;
             continue;
         }
+        if (*current == VIEW_PROCESSES && process_view->filtering) {
+            if (input[i] == '\r' || input[i] == '\n') {
+                process_view->filtering = false;
+                changed = true;
+            } else if (input[i] == 0x7f || input[i] == '\b') {
+                size_t length = strlen(process_view->filter);
+                if (length) {
+                    size_t start = length - 1;
+                    while (start > 0 &&
+                           ((unsigned char)process_view->filter[start] & 0xc0) == 0x80) start--;
+                    process_view->filter[start] = '\0';
+                }
+                process_view->offset = 0;
+                changed = true;
+            } else if (input[i] >= 0x20 && input[i] != 0x7f) {
+                size_t length = strlen(process_view->filter);
+                if (length + 1 < sizeof(process_view->filter)) {
+                    process_view->filter[length] = (char)input[i];
+                    process_view->filter[length + 1] = '\0';
+                    process_view->offset = 0;
+                    changed = true;
+                }
+            }
+            continue;
+        }
+
+        if (*current == VIEW_PROCESSES) {
+            bool handled = false;
+            if (input[i] == 'c' || input[i] == 'C') { process_view->sort = SORT_CPU; handled = true; }
+            else if (input[i] == 'm' || input[i] == 'M') { process_view->sort = SORT_MEM; handled = true; }
+            else if (input[i] == 't' || input[i] == 'T') { process_view->sort = SORT_THREADS; handled = true; }
+            else if (input[i] == 'p' || input[i] == 'P') { process_view->sort = SORT_PID; handled = true; }
+            else if (input[i] == 'n' || input[i] == 'N') { process_view->sort = SORT_NAME; handled = true; }
+            else if (input[i] == '/') { process_view->filtering = true; handled = true; }
+            else if (input[i] == 0x7f || input[i] == '\b') {
+                if (process_view->filter[0]) {
+                    process_view->filter[0] = '\0';
+                    process_view->offset = 0;
+                    handled = true;
+                }
+            } else if (input[i] == 'j' || input[i] == 'J') {
+                size_t amount = input[i] == 'J' ? (size_t)(terminal_height() > 8 ? terminal_height() - 8 : 10) : 1;
+                process_view->offset += amount;
+                handled = true;
+            } else if (input[i] == 'k' || input[i] == 'K') {
+                size_t amount = input[i] == 'K' ? (size_t)(terminal_height() > 8 ? terminal_height() - 8 : 10) : 1;
+                process_view->offset = process_view->offset > amount ? process_view->offset - amount : 0;
+                handled = true;
+            }
+            if (handled) { changed = true; continue; }
+        }
+
         View next = *current;
         if (input[i] == '1') {
             next = VIEW_DASHBOARD;
-        } else if (input[i] == '2' || input[i] == 'n' || input[i] == 'N') {
+        } else if (input[i] == '2' || input[i] == 'p' || input[i] == 'P') {
+            next = VIEW_PROCESSES;
+        } else if (input[i] == '3' || input[i] == 'n' || input[i] == 'N') {
             next = VIEW_NETWORKS;
-        } else if (input[i] == '3' || input[i] == 'u' || input[i] == 'U') {
+        } else if (input[i] == '4' || input[i] == 'u' || input[i] == 'U') {
             next = VIEW_USAGE;
         } else if (input[i] == '\t') {
-            next = *current == VIEW_DASHBOARD ? VIEW_NETWORKS :
+            next = *current == VIEW_DASHBOARD ? VIEW_PROCESSES :
+                   *current == VIEW_PROCESSES ? VIEW_NETWORKS :
                    *current == VIEW_NETWORKS ? VIEW_USAGE : VIEW_DASHBOARD;
         }
         if (next != *current) {
@@ -128,7 +188,7 @@ static bool handle_input(View *current) {
     return changed;
 }
 
-bool wait_for_input(View *current, int timeout_ms) {
+bool wait_for_input(View *current, ProcessViewState *process_view, int timeout_ms) {
     for (;;) {
         struct pollfd descriptor = { .fd = STDIN_FILENO, .events = POLLIN };
         int result;
@@ -138,7 +198,7 @@ bool wait_for_input(View *current, int timeout_ms) {
 
         if (result == 0) return true;
         if (result < 0 || (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL))) return false;
-        if ((descriptor.revents & POLLIN) && handle_input(current)) return true;
+        if ((descriptor.revents & POLLIN) && handle_input(current, process_view)) return true;
         /* Ignore scroll sequences and other input that does not change view. */
     }
 }

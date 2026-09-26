@@ -60,6 +60,7 @@ const char *sort_name(SortMode sort) {
     if (sort == SORT_MEM) return "memory";
     if (sort == SORT_PID) return "PID";
     if (sort == SORT_NAME) return "name";
+    if (sort == SORT_THREADS) return "threads";
     return "CPU";
 }
 

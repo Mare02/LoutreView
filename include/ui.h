@@ -18,9 +18,11 @@
 #define ANSI_CLAY "\033[38;5;210m"
 #define ANSI_ALT_SCREEN "\033[?1049h"
 #define ANSI_MAIN_SCREEN "\033[?1049l"
+#define ANSI_ERASE_TO_END "\033[J"
 #define ANSI_HIDE_CURSOR "\033[?25l"
 #define ANSI_SHOW_CURSOR "\033[?25h"
 #define ANSI_HOME "\033[H"
+#define ANSI_ERASE_LINE "\033[2K"
 #define ANSI_CLEAR_SCREEN "\033[2J\033[3J\033[H"
 #define ANSI_SYNC_BEGIN "\033[?2026h"
 #define ANSI_SYNC_END "\033[?2026l"
@@ -28,7 +30,7 @@ extern volatile sig_atomic_t running;
 void on_signal(int signal_number);
 void restore_terminal(void);
 bool configure_terminal(void);
-bool wait_for_input(View *current, int timeout_ms);
+bool wait_for_input(View *current, ProcessViewState *process_view, int timeout_ms);
 int terminal_width(void);
 int terminal_height(void);
 const char *status_color(double percent, bool color);
@@ -38,6 +40,8 @@ void print_view_header(const char *view_name, int width, bool color);
 void print_compact_header(const char *view_name, int width, bool color);
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options, bool clear, bool color);
 void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, bool color);
+void print_process_screen(const ProcessList *processes, ProcessViewState *state,
+                          bool clear, bool color);
 void print_usage_screen(bool clear, bool color);
 void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
                               const TerminalLayout *layout, bool clear, bool color);
