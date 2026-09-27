@@ -42,6 +42,12 @@ int main(void) {
         .battery = { .time_remaining_minutes = -1 }
     };
     NetworkSnapshot networks = { .status = METRIC_UNAVAILABLE };
+    DiskMountList disks = { .status = METRIC_OK, .count = 1 };
+    snprintf(disks.items[0].mount_point, sizeof(disks.items[0].mount_point), "/fixture");
+    disks.items[0].total_bytes = 1000;
+    disks.items[0].used_bytes = 250;
+    disks.items[0].available_bytes = 750;
+    disks.items[0].usage_percent = 25.0;
     UsageSnapshot usage = {0};
     usage_init(&usage.providers[0], "Claude Code");
     usage.providers[0].available = true;
@@ -55,11 +61,11 @@ int main(void) {
     usage.providers[0].window_count = 1;
     usage.count = 1;
     Options options = { .interval_ms = 250, .limit = 3, .include_usage = true };
-    assert(print_json_stream_frame(&snapshot, NAN, &metrics, &networks,
+    assert(print_json_stream_frame(&snapshot, NAN, &metrics, &networks, &disks,
                                    &usage, &options, 7));
     assert(dup2(saved, STDOUT_FILENO) >= 0); close(saved);
     rewind(stream_capture);
-    char frame[2048];
+    char frame[32768];
     n = fread(frame, 1, sizeof(frame) - 1, stream_capture);
     frame[n] = '\0';
     fclose(stream_capture);
@@ -69,6 +75,8 @@ int main(void) {
     assert(strstr(frame, "\"status\":{\"cpu\":\"unavailable\",\"processes\":\"permission_denied\""));
     assert(strstr(frame, "\"memory\":\"permission_denied\""));
     assert(strstr(frame, "\"disk\":\"error\""));
+    assert(strstr(frame, "\"disk_mounts\":\"available\""));
+    assert(strstr(frame, "\"mount_point\":\"/fixture\",\"total_bytes\":1000,\"used_bytes\":250,\"available_bytes\":750,\"usage_percent\":25.00"));
     assert(strstr(frame, "\"battery\":\"unavailable\",\"network\":\"unavailable\",\"usage\":\"available\""));
     assert(strstr(frame, "\"cpu\":{\"usage_percent\":null,\"load\":null}"));
     assert(strstr(frame, "\"memory\":{\"total_bytes\":null"));

@@ -96,8 +96,9 @@ does not use the host build output or modify other containers.
 ```
 
 The interactive dashboard refreshes every second. Press `1` for the dashboard,
-`2` or `n` for network statistics, and `Tab` to switch between views. Press
-`Ctrl-C` to exit.
+`2` or `p` for processes, `3` or `n` for network statistics, `4` or `u` for
+coding CLI usage, and `5` or `d` for mounted disks. Press `Tab` to switch
+between views. Press `Ctrl-C` to exit.
 
 ## Install as a command
 
@@ -174,8 +175,10 @@ Options:
 `--json-stream` emits newline-delimited JSON (NDJSON). Each frame has
 `schema_version`, `type`, `sequence`, `sample_time_monotonic`,
 `sample_interval_ms`, and a `status` object before the existing metric fields.
-Network interfaces are included in the stream frame under `network`; the
-sampled CPU, process, system, and network values come from the same loop
+Network interfaces are included in the stream frame under `network`; mounted
+filesystems appear under `disk.mounts` in both JSON formats. Each mount reports
+its point, total, used, available bytes, and usage percentage. The sampled CPU,
+process, system, network, and disk values come from the same loop
 iteration. Frames are independently parseable and flushed before the next
 sampling interval, so consumers can process them without waiting for the
 process to exit. The sequence starts at zero and increases by one. The
@@ -187,8 +190,10 @@ windows from the existing cache/live provider layer.
 
 ### Coding CLI usage
 
-Press `3` or `u` in the live dashboard to open the Coding CLI Usage view.
-Press `Tab` to cycle through the dashboard, network, and AI usage views. The
+Press `4` or `u` in the live dashboard to open the Coding CLI Usage view.
+Press `5` or `d` to inspect mounted filesystems and their total, used, available,
+and percentage values. Press `Tab` to cycle through the dashboard, process,
+network, AI usage, and disk views. The
 AI usage view reads credential-free, machine-readable provider snapshots from the
 user state directory and shows available quota windows and reset times. It
 does not add usage data to `--json` output.
@@ -204,9 +209,11 @@ Use `codex` or `gemini` for a matching provider bridge payload. Set
 `$XDG_STATE_HOME/loutre-view/usage` or `~/.local/state/loutre-view/usage`.
 
 `--json` automatically enables `--once`. Color is disabled when output is
-redirected. `--compact` is always opt-in; the full dashboard remains the
-default. On wide, short terminals, the full dashboard places top processes
-beside the CPU-core grid and limits that list to the available height.
+redirected. `--compact` selects the dense dashboard on wide terminals; the
+interactive dashboard switches to the dense layout automatically when the
+terminal is narrower than 78 columns. On wide, short terminals, the full
+dashboard places top processes beside the CPU-core grid and limits that list to
+the available height.
 
 On macOS, `startup` lists launch agents, launch daemons, and session login items.
 On Linux, it queries system and current-user services through `systemctl`

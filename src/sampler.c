@@ -200,3 +200,7 @@ SystemMetrics collect_system_metrics(void) {
     result.uptime = platform_uptime();
     return result;
 }
+
+DiskMountList collect_disk_mounts(void) {
+    return platform_disks();
+}

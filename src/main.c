@@ -76,7 +76,10 @@ int main(int argc, char **argv) {
             networks = collect_networks(have_previous_networks ? &previous_networks : NULL,
                                         elapsed);
         }
-        if (options.json) print_json(&current, cpu, &options);
+        DiskMountList disks = {0};
+        if (view == VIEW_DISKS || options.json || options.json_stream)
+            disks = collect_disk_mounts();
+        if (options.json) print_json(&current, cpu, &options, &disks);
         else if (options.json_stream) {
             SystemMetrics metrics = collect_system_metrics();
             UsageSnapshot usage = {0};
@@ -85,7 +88,7 @@ int main(int argc, char **argv) {
                 usage = collect_usage();
                 usage_pointer = &usage;
             }
-            if (!print_json_stream_frame(&current, cpu, &metrics, &networks,
+            if (!print_json_stream_frame(&current, cpu, &metrics, &networks, &disks,
                                          usage_pointer, &options, sequence++)) {
                 running = 0;
             }
@@ -102,10 +105,11 @@ int main(int argc, char **argv) {
                 fputs(ANSI_SYNC_BEGIN, stdout);
                 fputs(clear_screen ? ANSI_CLEAR_SCREEN : ANSI_HOME, stdout);
             }
+            bool compact_view = options.compact || (interactive && current_width < 78);
             if (view == VIEW_USAGE) {
                 print_usage_screen(clear_screen, color);
             }
-            else if (view == VIEW_NETWORKS && options.compact) {
+            else if (view == VIEW_NETWORKS && compact_view) {
                 print_compact_network_screen(&networks, clear_screen, color);
             }
             else if (view == VIEW_NETWORKS) {
@@ -114,7 +118,10 @@ int main(int argc, char **argv) {
             else if (view == VIEW_PROCESSES) {
                 print_process_screen(&current.processes, &process_view, clear_screen, color);
             }
-            else if (options.compact) {
+            else if (view == VIEW_DISKS) {
+                print_disk_screen(&disks, clear_screen, color, compact_view);
+            }
+            else if (compact_view) {
                 render_compact_dashboard(&current, cpu, &options, &layout, clear_screen, color);
             }
             else {

@@ -30,7 +30,7 @@ static size_t dashboard_process_limit(const ProcessList *processes, const Option
 }
 
 static int dashboard_side_process_rows(const TerminalLayout *layout) {
-    int header_rows = layout->width < 80 ? 3 : 2;
+    int header_rows = view_header_rows("DASHBOARD", layout->width, false);
     int rows = layout->height - header_rows - 8;
     return rows > 0 ? rows : 0;
 }
@@ -220,7 +220,7 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
         printf(" %s/%s  ", memory_used, memory_total);
         print_compact_metric_label("DISK", ANSI_BRAND, color);
         printf(" %s/%s", disk_used, disk_total);
-        if (metrics.battery.available) {
+        if (metrics.battery.available && layout->compact_battery) {
             printf("  ");
             print_compact_metric_label("BAT", ANSI_BRAND, color);
             printf(" %d%%", metrics.battery.percent);
@@ -246,7 +246,7 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
         putchar(' '); print_percent(memory_percent, 0, 0, true); fputs("  ", stdout);
         print_compact_metric_label("DISK", ANSI_BRAND, color);
         putchar(' '); print_percent(disk_percent, 0, 0, true);
-        if (metrics.battery.available) {
+        if (metrics.battery.available && layout->compact_battery) {
             printf("  ");
             print_compact_metric_label("BAT", ANSI_BRAND, color);
             printf(" %d%%", metrics.battery.percent);
@@ -263,7 +263,7 @@ void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Option
     print_compact_process_header(show_memory, color);
     putchar('\n');
     if (snapshot->processes.status != METRIC_OK) puts("  Processes n/a");
-    int compact_header_rows = layout->width < 84 ? 2 : 1;
+    int compact_header_rows = view_header_rows("DASHBOARD", layout->width, true);
     int compact_fixed_rows = compact_header_rows + 3;
     int compact_process_rows = layout->height - compact_fixed_rows - 1;
     size_t count = dashboard_process_limit(&snapshot->processes, options, layout->height,
@@ -352,7 +352,7 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
         return;
     }
 
-    int header_rows = layout->width < 80 ? 3 : 2;
+    int header_rows = view_header_rows("DASHBOARD", layout->width, false);
     size_t standard_core_rows = (core_count + (size_t)layout->dashboard_core_columns - 1) /
                                 (size_t)layout->dashboard_core_columns;
     int fixed_rows = header_rows + 4 + (int)standard_core_rows + 5;

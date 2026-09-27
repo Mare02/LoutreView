@@ -10,12 +10,13 @@
 #define LOUTRE_PATH_MAX 4096
 #define MAX_CPU_CORES 128
 #define MAX_NETWORK_INTERFACES 64
+#define MAX_DISK_MOUNTS 128
 #define DEFAULT_LIMIT 12
 #define MIN_INTERVAL_MS 250
 
 typedef enum { METRIC_OK, METRIC_UNAVAILABLE, METRIC_PERMISSION, METRIC_ERROR } MetricStatus;
 typedef enum { SORT_CPU, SORT_MEM, SORT_PID, SORT_NAME, SORT_THREADS } SortMode;
-typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE, VIEW_PROCESSES } View;
+typedef enum { VIEW_DASHBOARD, VIEW_NETWORKS, VIEW_USAGE, VIEW_PROCESSES, VIEW_DISKS } View;
 typedef struct {
     SortMode sort;
     char filter[128];
@@ -71,6 +72,17 @@ typedef struct {
     MetricStatus status;
     bool truncated;
 } NetworkSnapshot;
+typedef struct {
+    char mount_point[LOUTRE_PATH_MAX];
+    unsigned long long total_bytes, used_bytes, available_bytes;
+    double usage_percent;
+} DiskMount;
+typedef struct {
+    DiskMount items[MAX_DISK_MOUNTS];
+    size_t count;
+    MetricStatus status;
+    bool truncated, partial;
+} DiskMountList;
 typedef struct {
     int interval_ms, limit;
     bool limit_explicit, once, json, json_stream, include_usage, compact, startup, usage_ingest;

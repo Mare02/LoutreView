@@ -50,7 +50,44 @@ bool configure_terminal(void) {
     return true;
 }
 
-void print_view_header(const char *view_name, int width, bool color) {
+static const char *VIEW_NAVIGATION =
+    "1: Dashboard · 2: Processes · 3: Networks · 4: AI usage · 5: Disks";
+enum { VIEW_NAVIGATION_COLUMNS = 66 };
+
+static int view_navigation_rows(int width) {
+    return width < 28 ? 5 : width < 40 ? 3 : width < 67 ? 2 : 1;
+}
+
+static bool view_header_fits_inline(const char *view_name, int width) {
+    size_t title_width = strlen("LOUTREVIEW  /  ") + strlen(view_name);
+    size_t menu_width = VIEW_NAVIGATION_COLUMNS;
+    return title_width + 3 + menu_width <= (size_t)(width > 0 ? width - 1 : 0);
+}
+
+static void print_view_navigation(int width, bool color, bool inline_header) {
+    if (inline_header || width >= 67) {
+        fputs(VIEW_NAVIGATION, stdout);
+        if (!inline_header) putchar('\n');
+    } else if (width < 28) {
+        fputs("1: Dashboard\n2: Processes\n3: Networks\n4: AI usage\n5: Disks\n", stdout);
+    } else if (width < 40) {
+        fputs("1: Dashboard\n2: Processes · 3: Networks\n4: AI usage · 5: Disks\n", stdout);
+    } else {
+        fputs("1: Dashboard · 2: Processes\n", stdout);
+        fputs("3: Networks · 4: AI usage · 5: Disks\n", stdout);
+    }
+    if (color) fputs(ANSI_RESET, stdout);
+}
+
+int view_header_rows(const char *view_name, int width, bool compact) {
+    int title_rows = compact ? 1 : 2;
+    if (view_header_fits_inline(view_name, width)) return compact ? 1 : 2;
+    return title_rows + view_navigation_rows(width);
+}
+
+/* Keep the full menu beside the title only when it cannot trigger auto-wrap. */
+static void print_view_heading(const char *view_name, int width, bool color, bool compact) {
+    bool inline_header = view_header_fits_inline(view_name, width);
     if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
     fputs("LOUTREVIEW", stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
@@ -58,13 +95,19 @@ void print_view_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
     fputs(view_name, stdout);
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
-    if (width < 80) {
+    if (inline_header) {
+        fputs("   ", stdout);
+        print_view_navigation(width, color, true);
         putchar('\n');
-        fputs("1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
-        if (color) fputs(ANSI_RESET, stdout);
     } else {
-        fputs("   1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
+        putchar('\n');
+        if (compact) fputs(ANSI_ERASE_LINE, stdout);
+        print_view_navigation(width, color, false);
     }
+}
+
+void print_view_header(const char *view_name, int width, bool color) {
+    print_view_heading(view_name, width, color, false);
     if (color) fputs(ANSI_SLATE, stdout);
     for (int i = 0; i < width - 1; i++) fputs("─", stdout);
     if (color) fputs(ANSI_RESET, stdout);
@@ -72,21 +115,7 @@ void print_view_header(const char *view_name, int width, bool color) {
 }
 
 void print_compact_header(const char *view_name, int width, bool color) {
-    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
-    fputs("LOUTREVIEW", stdout);
-    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
-    fputs("  /  ", stdout);
-    if (color) fputs(ANSI_BRAND_BRIGHT ANSI_BOLD, stdout);
-    fputs(view_name, stdout);
-    if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
-    if (width < 84) {
-        putchar('\n');
-        fputs(ANSI_ERASE_LINE, stdout);
-        fputs("1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
-        if (color) fputs(ANSI_RESET, stdout);
-    } else {
-        fputs("   1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
-    }
+    print_view_heading(view_name, width, color, true);
 }
 
 static bool handle_input(View *current, ProcessViewState *process_view) {
@@ -176,10 +205,13 @@ static bool handle_input(View *current, ProcessViewState *process_view) {
             next = VIEW_NETWORKS;
         } else if (input[i] == '4' || input[i] == 'u' || input[i] == 'U') {
             next = VIEW_USAGE;
+        } else if (input[i] == '5' || input[i] == 'd' || input[i] == 'D') {
+            next = VIEW_DISKS;
         } else if (input[i] == '\t') {
             next = *current == VIEW_DASHBOARD ? VIEW_PROCESSES :
                    *current == VIEW_PROCESSES ? VIEW_NETWORKS :
-                   *current == VIEW_NETWORKS ? VIEW_USAGE : VIEW_DASHBOARD;
+                   *current == VIEW_NETWORKS ? VIEW_USAGE :
+                   *current == VIEW_USAGE ? VIEW_DISKS : VIEW_DASHBOARD;
         }
         if (next != *current) {
             *current = next;

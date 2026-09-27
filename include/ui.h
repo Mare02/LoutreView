@@ -33,6 +33,7 @@ bool configure_terminal(void);
 bool wait_for_input(View *current, ProcessViewState *process_view, int timeout_ms);
 int terminal_width(void);
 int terminal_height(void);
+int view_header_rows(const char *view_name, int width, bool compact);
 const char *status_color(double percent, bool color);
 void print_bar(double percent, int width, bool color);
 void print_battery_bar(double percent, int width, bool color);
@@ -42,6 +43,7 @@ void print_network_screen(const NetworkSnapshot *snapshot, const Options *option
 void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, bool color);
 void print_process_screen(const ProcessList *processes, ProcessViewState *state,
                           bool clear, bool color);
+void print_disk_screen(const DiskMountList *disks, bool clear, bool color, bool compact);
 void print_usage_screen(bool clear, bool color);
 void render_compact_dashboard(const Snapshot *snapshot, double cpu, const Options *options,
                               const TerminalLayout *layout, bool clear, bool color);
@@ -49,9 +51,11 @@ void render_dashboard(const Snapshot *snapshot, double cpu, const Options *optio
                       const double *core_usage, size_t core_count,
                       const TerminalLayout *layout, bool clear, bool color);
 void print_startup_report(const Options *options);
-void print_json(const Snapshot *snapshot, double cpu, const Options *options);
+void print_json(const Snapshot *snapshot, double cpu, const Options *options,
+                const DiskMountList *disks);
 bool print_json_stream_frame(const Snapshot *snapshot, double cpu,
                              const SystemMetrics *metrics, const NetworkSnapshot *networks,
+                             const DiskMountList *disks,
                              const UsageSnapshot *usage, const Options *options,
                              unsigned long long sequence);
 void json_string(const char *value);

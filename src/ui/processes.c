@@ -42,7 +42,7 @@ void print_process_screen(const ProcessList *processes, ProcessViewState *state,
     int height = terminal_height();
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
     print_view_header("PROCESSES", width, color);
-    int header_rows = width < 80 ? 3 : 2;
+    int header_rows = view_header_rows("PROCESSES", width, false);
 
     if (color) fputs(ANSI_DIM, stdout);
     fputs(ANSI_ERASE_LINE, stdout);

@@ -11,6 +11,7 @@ void sample_network_usage(NetworkSnapshot *current, const NetworkSnapshot *previ
 Snapshot collect_snapshot(const Snapshot *previous);
 NetworkSnapshot collect_networks(const NetworkSnapshot *previous, double elapsed);
 SystemMetrics collect_system_metrics(void);
+DiskMountList collect_disk_mounts(void);
 void free_snapshot(Snapshot *snapshot);
 void sort_processes(ProcessList *list, SortMode sort);
 #endif

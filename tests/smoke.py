@@ -39,6 +39,11 @@ for sort in ["cpu", "mem", "pid", "name"]:
     assert 0 <= data["memory"]["used_bytes"] <= data["memory"]["total_bytes"]
     assert data["memory"]["total_bytes"] > 0
     assert data["disk"]["total_bytes"] > 0
+    assert data["disk"]["mounts_status"] == "available"
+    assert data["disk"]["mounts"]
+    assert all({"mount_point", "total_bytes", "used_bytes", "available_bytes", "usage_percent"} <= mount.keys()
+               for mount in data["disk"]["mounts"])
+    assert any(mount["mount_point"] == "/" for mount in data["disk"]["mounts"])
     assert data["uptime_seconds"] >= 0
     assert 0 < len(data["processes"]) <= 5
     assert all(p["memory_bytes"] >= 0 and p["threads"] >= 0 for p in data["processes"])
@@ -75,6 +80,8 @@ try:
     assert all(frame["sample_interval_ms"] == 250 for frame in frames)
     assert all(frame["status"]["cpu"] == "available" for frame in frames)
     assert all(isinstance(frame["network"]["interfaces"], list) for frame in frames)
+    assert all(frame["status"]["disk_mounts"] == "available" for frame in frames)
+    assert all(frame["disk"]["mounts"] for frame in frames)
     stream.send_signal(signal.SIGINT)
     assert stream.wait(timeout=5) == 0
 finally:
@@ -173,4 +180,5 @@ terminal_session()
 terminal_session(compact=True)
 terminal_session(view_key=b"2", view_name=b"PROCESSES")
 terminal_session(view_key=b"4", view_name=b"AI USAGE")
+terminal_session(view_key=b"5", view_name=b"DISKS")
 print("CLI, JSON, live metrics and terminal smoke tests passed")

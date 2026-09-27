@@ -66,11 +66,16 @@ static void print_usage_json(const UsageSnapshot *usage) {
 
 static void print_metric_statuses(const Snapshot *snapshot, const SystemMetrics *metrics,
                                   const NetworkSnapshot *networks,
+                                  const DiskMountList *disks,
                                   const UsageSnapshot *usage) {
     fputs("\"status\":{\"cpu\":", stdout); json_string(metric_status_name(snapshot->cpu_status));
     fputs(",\"processes\":", stdout); json_string(metric_status_name(snapshot->processes.status));
     fputs(",\"memory\":", stdout); json_string(metric_status_name(metrics->memory_status));
     fputs(",\"disk\":", stdout); json_string(metric_status_name(metrics->disk_status));
+    if (disks) {
+        fputs(",\"disk_mounts\":", stdout);
+        json_string(metric_status_name(disks->status));
+    }
     fputs(",\"load\":", stdout); json_string(metric_status_name(metrics->load_status));
     fputs(",\"battery\":", stdout);
     json_string(metrics->battery.available ? "available" : "unavailable");
@@ -106,7 +111,7 @@ static void print_network_json(const NetworkSnapshot *networks) {
 
 static void print_json_data(const Snapshot *snapshot, double cpu, const SystemMetrics *metrics,
                             const NetworkSnapshot *networks, const UsageSnapshot *usage,
-                            const Options *options) {
+                            const Options *options, const DiskMountList *disks) {
     fputs("\"cpu\":{\"usage_percent\":", stdout);
     number(snapshot->cpu_status == METRIC_OK ? cpu : NAN, 1);
     fputs(",\"load\":", stdout);
@@ -125,6 +130,21 @@ static void print_json_data(const Snapshot *snapshot, double cpu, const SystemMe
     number(metrics->pressure_percent_available ? metrics->pressure_percent : NAN, 2);
     fputs("},\"disk\":{\"total_bytes\":", stdout); bytes(metrics->disk_total, metrics->disk_status == METRIC_OK);
     fputs(",\"used_bytes\":", stdout); bytes(metrics->disk_used, metrics->disk_status == METRIC_OK);
+    fputs(",\"mounts_status\":", stdout);
+    json_string(disks ? metric_status_name(disks->status) : "unavailable");
+    printf(",\"truncated\":%s,\"partial\":%s,\"mounts\":[",
+           disks && disks->truncated ? "true" : "false",
+           disks && disks->partial ? "true" : "false");
+    if (disks) for (size_t i = 0; i < disks->count; i++) {
+        const DiskMount *mount = &disks->items[i];
+        if (i) putchar(',');
+        fputs("{\"mount_point\":", stdout); json_string(mount->mount_point);
+        printf(",\"total_bytes\":%llu,\"used_bytes\":%llu,\"available_bytes\":%llu,\"usage_percent\":",
+               mount->total_bytes, mount->used_bytes, mount->available_bytes);
+        number(mount->usage_percent, 2);
+        putchar('}');
+    }
+    putchar(']');
     fputs("},\"uptime_seconds\":", stdout); number(metrics->uptime >= 0 ? metrics->uptime : NAN, 0);
     fputs(",\"battery\":", stdout);
     if (!metrics->battery.available) fputs("null", stdout);
@@ -158,24 +178,26 @@ static void print_json_data(const Snapshot *snapshot, double cpu, const SystemMe
     putchar('}');
 }
 
-void print_json(const Snapshot *snapshot, double cpu, const Options *options) {
+void print_json(const Snapshot *snapshot, double cpu, const Options *options,
+                const DiskMountList *disks) {
     SystemMetrics metrics = collect_system_metrics();
     putchar('{');
-    print_json_data(snapshot, cpu, &metrics, NULL, NULL, options);
+    print_json_data(snapshot, cpu, &metrics, NULL, NULL, options, disks);
     putchar('\n');
 }
 
 bool print_json_stream_frame(const Snapshot *snapshot, double cpu,
                              const SystemMetrics *metrics, const NetworkSnapshot *networks,
+                             const DiskMountList *disks,
                              const UsageSnapshot *usage, const Options *options,
                              unsigned long long sequence) {
     fputs("{\"schema_version\":1,\"type\":\"metrics\",\"sequence\":", stdout);
     printf("%llu,\"sample_time_monotonic\":", sequence);
     number(snapshot->timestamp, 6);
     printf(",\"sample_interval_ms\":%d,", options->interval_ms);
-    print_metric_statuses(snapshot, metrics, networks, usage);
+    print_metric_statuses(snapshot, metrics, networks, disks, usage);
     putchar(',');
-    print_json_data(snapshot, cpu, metrics, networks, usage, options);
+    print_json_data(snapshot, cpu, metrics, networks, usage, options, disks);
     putchar('\n');
     return fflush(stdout) == 0 && !ferror(stdout);
 }

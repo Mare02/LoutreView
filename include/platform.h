@@ -16,4 +16,6 @@ StartupList platform_startup(void);
 
 /* Shared POSIX disk implementation. */
 MetricStatus platform_disk(SystemMetrics *out);
+DiskMountList platform_disks(void);
+bool platform_disk_mount_add(DiskMountList *list, const char *mount_point);
 #endif

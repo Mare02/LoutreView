@@ -78,7 +78,9 @@ void print_network_screen(const NetworkSnapshot *snapshot, const Options *option
     if (color) fputs(ANSI_RESET, stdout);
 
     size_t max_rows = snapshot->count;
-    if (height > 6 && max_rows > (size_t)(height - 6)) max_rows = (size_t)(height - 6);
+    int fixed_rows = view_header_rows("NETWORKS", width, false) + 3;
+    if (height > fixed_rows && max_rows > (size_t)(height - fixed_rows))
+        max_rows = (size_t)(height - fixed_rows);
     size_t rendered_count = 0;
     for (int show_active = 1; show_active >= 0 && rendered_count < max_rows; show_active--) {
         for (size_t i = 0; i < ordered.count && rendered_count < max_rows; i++) {
@@ -144,7 +146,9 @@ void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, b
     if (color) fputs(ANSI_RESET, stdout);
 
     size_t max_rows = ordered.count;
-    if (height > 3 && max_rows > (size_t)(height - 3)) max_rows = (size_t)(height - 3);
+    int fixed_rows = view_header_rows("NETWORKS", width, true) + 2;
+    if (height > fixed_rows && max_rows > (size_t)(height - fixed_rows))
+        max_rows = (size_t)(height - fixed_rows);
     size_t rendered_count = 0;
     for (size_t i = 0; i < ordered.count && rendered_count < max_rows; i++) {
         const NetworkInterface *network = &ordered.items[i];
