@@ -2,6 +2,7 @@
 #define _DARWIN_C_SOURCE
 #include "usage.h"
 #include "usage_provider.h"
+#include "../src/usage/usage_json.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,22 @@ static void test_provider_parsers(void) {
     assert(usage.windows[0].used_tokens == 31 && usage.windows[0].quota_tokens == 100);
     assert(gemini_cli_usage_parse(bridge, strlen(bridge), &usage));
     assert(!strcmp(usage.provider, "Gemini CLI"));
+
+    const char bounded[] = "{\"windows\":[{\"name\":\"bounded\",\"used_percent\":25}]}";
+    assert(codex_usage_parse(bounded, sizeof(bounded) - 1, &usage));
+    assert(usage.windows[0].used_percent == 25.0);
+
+    const char malformed[] = "{\"used_percent\":12x,}";
+    double number;
+    assert(!usage_json_number(malformed, sizeof(malformed) - 1, "used_percent", &number));
+
+    const char unterminated[] = {'{', '"', 'x', '"', ':', '1', '2', '3'};
+    assert(usage_json_number(unterminated, sizeof(unterminated), "x", &number));
+    assert(number == 123.0);
+
+    const char out_of_range[] = "{\"windows\":[{\"name\":\"large\",\"used_percent\":1,\"used_tokens\":1e100,\"quota_tokens\":1e100,\"resets_at\":1e100}]}";
+    assert(codex_usage_parse(out_of_range, sizeof(out_of_range) - 1, &usage));
+    assert(!usage.windows[0].has_tokens && !usage.windows[0].has_reset);
 }
 
 static void test_cache(void) {

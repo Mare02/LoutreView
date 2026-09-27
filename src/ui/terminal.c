@@ -81,6 +81,7 @@ void print_compact_header(const char *view_name, int width, bool color) {
     if (color) fputs(ANSI_RESET ANSI_DIM, stdout);
     if (width < 84) {
         putchar('\n');
+        fputs(ANSI_ERASE_LINE, stdout);
         fputs("1:dashboard · 2:processes · 3:networks · 4:ai usage\n", stdout);
         if (color) fputs(ANSI_RESET, stdout);
     } else {

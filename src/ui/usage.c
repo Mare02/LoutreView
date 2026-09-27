@@ -17,6 +17,7 @@ static void print_reset(time_t reset) {
 }
 
 static void print_window(const UsageWindow *window, bool color) {
+    fputs(ANSI_ERASE_LINE, stdout);
     printf("  %-10s ", window->name);
     if (window->has_percent) {
         if (color) fputs(status_color(window->used_percent, color), stdout);
@@ -36,21 +37,26 @@ static void print_window(const UsageWindow *window, bool color) {
 
 void print_usage_screen(bool clear, bool color) {
     if (clear) fputs(ANSI_CLEAR_SCREEN, stdout);
-    else fputs(ANSI_HOME ANSI_ERASE_TO_END, stdout);
+    fputs(ANSI_ERASE_LINE, stdout);
     print_compact_header("AI USAGE", terminal_width(), color);
     UsageSnapshot snapshot = collect_usage();
     if (snapshot.count == 0) {
-        puts("\n  No installed AI CLI providers detected");
+        putchar('\n');
+        fputs(ANSI_ERASE_LINE, stdout);
+        puts("  No installed AI CLI providers detected");
         fputs(ANSI_ERASE_TO_END, stdout);
         fflush(stdout);
         return;
     }
     for (size_t i = 0; i < snapshot.count; i++) {
         const ProviderUsage *usage = &snapshot.providers[i];
+        putchar('\n');
+        fputs(ANSI_ERASE_LINE, stdout);
         if (color) fputs(ANSI_BRAND ANSI_BOLD, stdout);
-        printf("\n%s\n", usage->provider);
+        printf("%s\n", usage->provider);
         if (color) fputs(ANSI_RESET, stdout);
         if (!usage || !usage->available || usage->window_count == 0) {
+            fputs(ANSI_ERASE_LINE, stdout);
             puts("  Usage data unavailable");
             continue;
         }

@@ -32,6 +32,23 @@ static int compare_network_usage(const void *left_value, const void *right_value
     return strcmp(left->name, right->name);
 }
 
+static void prepare_networks(const NetworkSnapshot *snapshot, NetworkSnapshot *ordered,
+                             size_t *active_count, double *receive_rate,
+                             double *transmit_rate) {
+    *ordered = *snapshot;
+    safe_interface_names(ordered);
+    if (ordered->count > 1)
+        qsort(ordered->items, ordered->count, sizeof(ordered->items[0]), compare_network_usage);
+    *active_count = 0;
+    *receive_rate = 0.0;
+    *transmit_rate = 0.0;
+    for (size_t i = 0; i < ordered->count; i++) {
+        if (ordered->items[i].up) (*active_count)++;
+        *receive_rate += ordered->items[i].receive_rate;
+        *transmit_rate += ordered->items[i].transmit_rate;
+    }
+}
+
 void print_network_screen(const NetworkSnapshot *snapshot, const Options *options,
                                  bool clear, bool color) {
     (void)options;
@@ -43,17 +60,10 @@ void print_network_screen(const NetworkSnapshot *snapshot, const Options *option
     }
     int width = terminal_width();
     int height = terminal_height();
-    NetworkSnapshot ordered = *snapshot;
-    safe_interface_names(&ordered);
-    qsort(ordered.items, ordered.count, sizeof(ordered.items[0]), compare_network_usage);
-    size_t active_count = 0;
-    double receive_rate = 0.0;
-    double transmit_rate = 0.0;
-    for (size_t i = 0; i < snapshot->count; i++) {
-        if (snapshot->items[i].up) active_count++;
-        receive_rate += snapshot->items[i].receive_rate;
-        transmit_rate += snapshot->items[i].transmit_rate;
-    }
+    NetworkSnapshot ordered;
+    size_t active_count;
+    double receive_rate, transmit_rate;
+    prepare_networks(snapshot, &ordered, &active_count, &receive_rate, &transmit_rate);
     char receive_total[16], transmit_total[16];
     format_rate(receive_rate, receive_total, sizeof(receive_total));
     format_rate(transmit_rate, transmit_total, sizeof(transmit_total));
@@ -115,17 +125,10 @@ void print_compact_network_screen(const NetworkSnapshot *snapshot, bool clear, b
     }
     int width = terminal_width();
     int height = terminal_height();
-    NetworkSnapshot ordered = *snapshot;
-    safe_interface_names(&ordered);
-    qsort(ordered.items, ordered.count, sizeof(ordered.items[0]), compare_network_usage);
-    size_t active_count = 0;
-    double receive_rate = 0.0;
-    double transmit_rate = 0.0;
-    for (size_t i = 0; i < ordered.count; i++) {
-        if (ordered.items[i].up) active_count++;
-        receive_rate += ordered.items[i].receive_rate;
-        transmit_rate += ordered.items[i].transmit_rate;
-    }
+    NetworkSnapshot ordered;
+    size_t active_count;
+    double receive_rate, transmit_rate;
+    prepare_networks(snapshot, &ordered, &active_count, &receive_rate, &transmit_rate);
     char receive_total[16], transmit_total[16];
     format_rate(receive_rate, receive_total, sizeof(receive_total));
     format_rate(transmit_rate, transmit_total, sizeof(transmit_total));

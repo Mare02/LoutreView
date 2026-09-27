@@ -2,6 +2,7 @@
 #include "../usage/usage_json.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,32 @@ extern volatile sig_atomic_t running;
 
 bool codex_usage_parse(const char *input, size_t length, ProviderUsage *output) {
     return usage_parse_bridge_json(input, length, "Codex", output);
+}
+
+static void stop_child(pid_t child) {
+    (void)kill(child, SIGTERM);
+    struct timespec deadline;
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) == 0) {
+        deadline.tv_nsec += 250000000L;
+        if (deadline.tv_nsec >= 1000000000L) {
+            deadline.tv_sec++;
+            deadline.tv_nsec -= 1000000000L;
+        }
+        for (;;) {
+            int status;
+            pid_t result = waitpid(child, &status, WNOHANG);
+            if (result == child || (result < 0 && errno != EINTR)) return;
+            struct timespec now;
+            if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 ||
+                now.tv_sec > deadline.tv_sec ||
+                (now.tv_sec == deadline.tv_sec && now.tv_nsec >= deadline.tv_nsec)) break;
+            struct timespec pause = { .tv_nsec = 10000000L };
+            nanosleep(&pause, NULL);
+        }
+    }
+    (void)kill(child, SIGKILL);
+    int status;
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
 }
 
 static bool write_all(int fd, const char *data, size_t length) {
@@ -37,7 +64,12 @@ static bool has_response_id(const char *output) {
 static bool read_app_server(char *output, size_t capacity) {
     int input_pipe[2];
     int output_pipe[2];
-    if (pipe(input_pipe) != 0 || pipe(output_pipe) != 0) return false;
+    if (pipe(input_pipe) != 0) return false;
+    if (pipe(output_pipe) != 0) {
+        close(input_pipe[0]);
+        close(input_pipe[1]);
+        return false;
+    }
 
     pid_t child = fork();
     if (child < 0) {
@@ -46,13 +78,11 @@ static bool read_app_server(char *output, size_t capacity) {
         return false;
     }
     if (child == 0) {
-        dup2(input_pipe[0], STDIN_FILENO);
-        dup2(output_pipe[1], STDOUT_FILENO);
+        if (dup2(input_pipe[0], STDIN_FILENO) < 0 ||
+            dup2(output_pipe[1], STDOUT_FILENO) < 0) _exit(126);
         int null_fd = open("/dev/null", O_WRONLY);
-        if (null_fd >= 0) {
-            dup2(null_fd, STDERR_FILENO);
-            if (null_fd != STDERR_FILENO) close(null_fd);
-        }
+        if (null_fd >= 0 && dup2(null_fd, STDERR_FILENO) < 0) _exit(126);
+        if (null_fd > STDERR_FILENO) close(null_fd);
         close(input_pipe[0]); close(input_pipe[1]);
         close(output_pipe[0]); close(output_pipe[1]);
         execlp("codex", "codex", "app-server", "--stdio", (char *)NULL);
@@ -72,7 +102,12 @@ static bool read_app_server(char *output, size_t capacity) {
     size_t used = 0;
     output[0] = '\0';
     struct timespec deadline;
-    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    if (clock_gettime(CLOCK_MONOTONIC, &deadline) != 0) {
+        close(input_pipe[1]);
+        close(output_pipe[0]);
+        stop_child(child);
+        return false;
+    }
     deadline.tv_sec += 2;
     while (ok && used + 1 < capacity) {
         if (!running) { ok = false; break; }
@@ -80,7 +115,7 @@ static bool read_app_server(char *output, size_t capacity) {
         FD_ZERO(&read_set);
         FD_SET(output_pipe[0], &read_set);
         struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) { ok = false; break; }
         time_t seconds = deadline.tv_sec - now.tv_sec;
         long nanoseconds = deadline.tv_nsec - now.tv_nsec;
         if (nanoseconds < 0) { seconds--; nanoseconds += 1000000000L; }
@@ -104,9 +139,7 @@ static bool read_app_server(char *output, size_t capacity) {
     }
     close(input_pipe[1]);
     close(output_pipe[0]);
-    kill(child, SIGTERM);
-    int status;
-    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    stop_child(child);
     return ok && has_response_id(output);
 }
 
@@ -124,7 +157,8 @@ static bool parse_bucket(const char *input, size_t length, const char *key,
     if (!usage_json_number(bucket, (size_t)(end - bucket), "usedPercent",
                            &used_percent) ||
         !usage_json_number(bucket, (size_t)(end - bucket), "windowDurationMins",
-                           &duration)) return false;
+                           &duration) || duration <= 0.0 || duration >= (double)LONG_MAX)
+        return false;
     char window_name[USAGE_WINDOW_NAME_MAX];
     if (duration == 300.0) snprintf(window_name, sizeof(window_name), "5h");
     else if (duration == 10080.0) snprintf(window_name, sizeof(window_name), "7d");
@@ -134,7 +168,7 @@ static bool parse_bucket(const char *input, size_t length, const char *key,
     window.used_percent = used_percent;
     window.has_percent = true;
     if (usage_json_number(bucket, (size_t)(end - bucket), "resetsAt", &reset) &&
-        reset >= 0) {
+        reset >= 0 && reset < (double)LLONG_MAX) {
         window.resets_at = (time_t)reset;
         window.has_reset = true;
     }
