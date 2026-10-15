@@ -7,6 +7,7 @@
 #include "platform.h"
 #include "usage.h"
 #include "usage_provider.h"
+#include "update.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +35,7 @@ static bool ingest_usage(const Options *options) {
 int main(int argc, char **argv) {
     Options options;
     if (parse_args(argc, argv, &options) != 0) { print_usage(stderr); return 2; }
+    if (options.update) return update_cli(argv[0]);
     if (options.usage_ingest) return ingest_usage(&options) ? 0 : 1;
     signal(SIGINT, on_signal); signal(SIGTERM, on_signal);
     if (options.json_stream) signal(SIGPIPE, SIG_IGN);

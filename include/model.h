@@ -73,7 +73,7 @@ typedef struct {
 } NetworkSnapshot;
 typedef struct {
     int interval_ms, limit;
-    bool limit_explicit, once, json, json_stream, include_usage, compact, startup, usage_ingest;
+    bool limit_explicit, once, json, json_stream, include_usage, compact, startup, usage_ingest, update;
     char usage_provider[32];
     SortMode sort;
 } Options;

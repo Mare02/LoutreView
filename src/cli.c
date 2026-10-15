@@ -32,6 +32,7 @@ void print_usage(FILE *stream) {
         "      --include-usage Add coding CLI usage to stream frames (requires --json-stream)\n"
         "\nCommands:\n"
         "  startup              Inspect startup services and login items\n"
+        "  update               Update to the latest release\n"
         "  usage ingest NAME    Cache provider usage JSON from stdin\n"
         "  -h, --help           Show this help\n"
         "  -v, --version        Show version\n", MIN_INTERVAL_MS, DEFAULT_LIMIT);
@@ -51,6 +52,11 @@ int parse_args(int argc, char **argv, Options *options) {
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         if (!strcmp(arg, "startup")) { options->startup = true; continue; }
+        if (!strcmp(arg, "update")) {
+            if (argc != 2 || i != 1) return -1;
+            options->update = true;
+            continue;
+        }
         if (!strcmp(arg, "usage")) {
             if (++i >= argc || strcmp(argv[i], "ingest") != 0 || ++i >= argc) return -1;
             const UsageProvider *provider = usage_provider_find(argv[i]);

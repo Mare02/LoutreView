@@ -154,7 +154,12 @@ Useful examples:
 ./loutre-view --compact              # dense dashboard for any terminal width
 loutre-view startup --json           # machine-readable startup inventory
 loutre-view startup --once           # static one-shot startup report
+loutre-view update                   # update to the latest release
 ```
+
+`loutre-view update` uses the release installer, verifies the archive
+checksum, and updates the executable in its current installation directory.
+The command needs write permission for that directory.
 
 Options:
 

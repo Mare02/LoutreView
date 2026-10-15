@@ -47,6 +47,7 @@ $(BUILD_DIR)/tests/%: tests/%.c $(LIB_OBJECTS)
 test: $(TARGET) $(TEST_BINS)
 	@set -e; for test_bin in $(TEST_BINS); do "$$test_bin"; done
 	@if [ -f tests/test_installer.sh ]; then sh tests/test_installer.sh; fi
+	@if [ -f tests/test_update.sh ]; then sh tests/test_update.sh "$(abspath $(TARGET))"; fi
 	@if [ -f tests/smoke.py ]; then python3 tests/smoke.py "$(abspath $(TARGET))"; fi
 
 LINUX_TEST_IMAGE ?= loutre-view-linux-test:local
