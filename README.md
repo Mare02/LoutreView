@@ -158,8 +158,9 @@ loutre-view update                   # update to the latest release
 ```
 
 `loutre-view update` uses the release installer, verifies the archive
-checksum, and updates the executable in its current installation directory.
-The command needs write permission for that directory.
+checksum, skips downloading when the installed version is current, and updates
+the executable in its current installation directory. The command needs write
+permission for that directory.
 
 Options:
 
