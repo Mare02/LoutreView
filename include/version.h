@@ -1,4 +1,4 @@
 #ifndef LOUTRE_VERSION_H
 #define LOUTRE_VERSION_H
-#define VERSION "0.2.10"
+#define VERSION "0.2.11"
 #endif
