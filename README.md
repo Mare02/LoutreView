@@ -205,8 +205,7 @@ Provider bridges can ingest a payload from standard input:
 loutre-view usage ingest codex < codex-usage.json
 ```
 
-Use `codex` or `gemini` for the matching provider bridge payload. Set
-`LOUTREVIEW_USAGE_DIR` to choose a cache directory; otherwise LoutreView uses
+Set `LOUTREVIEW_USAGE_DIR` to choose a cache directory; otherwise LoutreView uses
 `$XDG_STATE_HOME/loutre-view/usage` or `~/.local/state/loutre-view/usage`.
 
 `--json` automatically enables `--once`. Color is disabled when output is

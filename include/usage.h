@@ -8,7 +8,7 @@
 #define USAGE_PROVIDER_MAX 32
 #define USAGE_WINDOW_NAME_MAX 32
 #define USAGE_MAX_WINDOWS 8
-#define USAGE_MAX_PROVIDERS 2
+#define USAGE_MAX_PROVIDERS 1
 
 typedef struct {
     char name[USAGE_WINDOW_NAME_MAX];

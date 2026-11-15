@@ -5,8 +5,7 @@
 #include <stddef.h>
 
 typedef enum {
-    USAGE_PROVIDER_CODEX,
-    USAGE_PROVIDER_GEMINI_CLI
+    USAGE_PROVIDER_CODEX
 } UsageProviderKind;
 
 typedef bool (*UsageProviderParse)(const char *input, size_t length,
@@ -33,7 +32,5 @@ bool usage_cache_path(UsageProviderKind kind, char *out, size_t capacity);
 /* Adapters intentionally accept only bridge/cache JSON, never credentials. */
 bool codex_usage_parse(const char *input, size_t length, ProviderUsage *output);
 bool codex_usage_collect(ProviderUsage *output);
-bool gemini_cli_usage_parse(const char *input, size_t length,
-                            ProviderUsage *output);
 
 #endif

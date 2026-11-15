@@ -25,8 +25,6 @@ static void test_provider_parsers(void) {
     assert(codex_usage_parse(bridge, strlen(bridge), &usage));
     assert(!strcmp(usage.provider, "Codex") && usage.window_count == 1);
     assert(usage.windows[0].used_tokens == 31 && usage.windows[0].quota_tokens == 100);
-    assert(gemini_cli_usage_parse(bridge, strlen(bridge), &usage));
-    assert(!strcmp(usage.provider, "Gemini CLI"));
 
     const char bounded[] = "{\"windows\":[{\"name\":\"bounded\",\"used_percent\":25}]}";
     assert(codex_usage_parse(bounded, sizeof(bounded) - 1, &usage));
@@ -72,7 +70,7 @@ int main(void) {
     test_normalization();
     test_provider_parsers();
     test_cache();
-    assert(usage_provider_count() == 2 && !usage_provider_find("claude"));
+    assert(usage_provider_count() == 1 && !usage_provider_find("claude") && !usage_provider_find("gemini"));
     puts("Usage tests passed");
     return 0;
 }

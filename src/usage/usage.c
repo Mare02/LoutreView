@@ -15,7 +15,6 @@ static bool codex_live_attempted;
 static const char *provider_command(UsageProviderKind kind) {
     switch (kind) {
     case USAGE_PROVIDER_CODEX: return "codex";
-    case USAGE_PROVIDER_GEMINI_CLI: return "gemini";
     }
     return NULL;
 }
@@ -65,8 +64,8 @@ static bool usage_path(char *out, size_t capacity, const char *root, const char 
 
 bool usage_cache_path(UsageProviderKind kind, char *out, size_t capacity) {
     const char *root = usage_cache_root();
-    const char *files[] = {"codex.json", "gemini-cli.json"};
-    if (kind < USAGE_PROVIDER_CODEX || kind > USAGE_PROVIDER_GEMINI_CLI) return false;
+    const char *files[] = {"codex.json"};
+    if (kind < USAGE_PROVIDER_CODEX || kind > USAGE_PROVIDER_CODEX) return false;
     return usage_path(out, capacity, root, files[kind]);
 }
 
