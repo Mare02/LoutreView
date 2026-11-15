@@ -43,7 +43,7 @@ int main(void) {
     };
     NetworkSnapshot networks = { .status = METRIC_UNAVAILABLE };
     UsageSnapshot usage = {0};
-    usage_init(&usage.providers[0], "Claude Code");
+    usage_init(&usage.providers[0], "Codex");
     usage.providers[0].available = true;
     usage.providers[0].collected_at = 1700000000;
     usage_window_init(&usage.providers[0].windows[0], "5-hour");
@@ -75,7 +75,7 @@ int main(void) {
     assert(strstr(frame, "\"processes\":null"));
     assert(strstr(frame, "\"network\":{\"status\":\"unavailable\""));
     assert(strstr(frame, "\"usage\":{\"status\":\"available\",\"providers\":["));
-    assert(strstr(frame, "\"provider\":\"Claude Code\""));
+    assert(strstr(frame, "\"provider\":\"Codex\""));
     assert(strstr(frame, "\"used_percent\":23.50"));
     assert(strstr(frame, "\"remaining_percent\":76.50"));
     assert(strstr(frame, "\"resets_at\":1700003600"));

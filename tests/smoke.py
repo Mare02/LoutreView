@@ -28,7 +28,7 @@ assert run("--version").startswith("loutre-view ")
 assert "Usage:" in run("--help")
 for args in [("--invalid",), ("--interval", "0"), ("--limit", "-1"), ("--sort", "invalid"),
              ("--json", "--json-stream"), ("startup", "--json-stream"),
-             ("usage", "ingest", "claude", "--json-stream"), ("--include-usage",),
+             ("usage", "ingest", "codex", "--json-stream"), ("--include-usage",),
              ("--json", "--include-usage")]:
     result = subprocess.run([binary, *args], capture_output=True, timeout=10)
     assert result.returncode == 2, args

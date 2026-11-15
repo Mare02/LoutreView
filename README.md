@@ -202,10 +202,10 @@ does not add usage data to `--json` output.
 Provider bridges can ingest a payload from standard input:
 
 ```sh
-loutre-view usage ingest claude < claude-statusline.json
+loutre-view usage ingest codex < codex-usage.json
 ```
 
-Use `codex` or `gemini` for a matching provider bridge payload. Set
+Use `codex` or `gemini` for the matching provider bridge payload. Set
 `LOUTREVIEW_USAGE_DIR` to choose a cache directory; otherwise LoutreView uses
 `$XDG_STATE_HOME/loutre-view/usage` or `~/.local/state/loutre-view/usage`.
 

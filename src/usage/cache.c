@@ -43,8 +43,6 @@ bool usage_cache_read_provider(UsageProviderKind kind, const char *path,
     char *contents = NULL; size_t length = 0;
     if (!read_file(path, &contents, &length)) return false;
     bool ok = usage_provider_parse(kind, contents, length, output);
-    if (!ok && kind == USAGE_PROVIDER_CLAUDE_CODE)
-        ok = usage_parse_bridge_json(contents, length, "Claude Code", output);
     free(contents);
     return ok;
 }

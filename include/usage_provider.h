@@ -6,7 +6,6 @@
 
 typedef enum {
     USAGE_PROVIDER_CODEX,
-    USAGE_PROVIDER_CLAUDE_CODE,
     USAGE_PROVIDER_GEMINI_CLI
 } UsageProviderKind;
 
@@ -30,10 +29,6 @@ bool usage_cache_write(const char *path, const ProviderUsage *usage);
 bool usage_cache_read_provider(UsageProviderKind kind, const char *path,
                                ProviderUsage *output);
 bool usage_cache_path(UsageProviderKind kind, char *out, size_t capacity);
-
-/* Converts a Claude Code status-line payload into a cache-ready usage value. */
-bool claude_code_usage_from_statusline(const char *input, size_t length,
-                                       ProviderUsage *output);
 
 /* Adapters intentionally accept only bridge/cache JSON, never credentials. */
 bool codex_usage_parse(const char *input, size_t length, ProviderUsage *output);

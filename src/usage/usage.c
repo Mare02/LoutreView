@@ -15,7 +15,6 @@ static bool codex_live_attempted;
 static const char *provider_command(UsageProviderKind kind) {
     switch (kind) {
     case USAGE_PROVIDER_CODEX: return "codex";
-    case USAGE_PROVIDER_CLAUDE_CODE: return "claude";
     case USAGE_PROVIDER_GEMINI_CLI: return "gemini";
     }
     return NULL;
@@ -66,7 +65,7 @@ static bool usage_path(char *out, size_t capacity, const char *root, const char 
 
 bool usage_cache_path(UsageProviderKind kind, char *out, size_t capacity) {
     const char *root = usage_cache_root();
-    const char *files[] = {"codex.json", "claude-code.json", "gemini-cli.json"};
+    const char *files[] = {"codex.json", "gemini-cli.json"};
     if (kind < USAGE_PROVIDER_CODEX || kind > USAGE_PROVIDER_GEMINI_CLI) return false;
     return usage_path(out, capacity, root, files[kind]);
 }
@@ -117,7 +116,7 @@ const UsageWindow *usage_find_window(const ProviderUsage *usage, const char *nam
 
 UsageSnapshot collect_usage(void) {
     UsageSnapshot snapshot = {0};
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < usage_provider_count(); i++) {
         const UsageProvider *provider = usage_provider_at(i);
         if (!provider) continue;
         if (!command_installed(provider_command(provider->kind))) continue;

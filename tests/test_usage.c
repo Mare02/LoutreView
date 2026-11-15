@@ -20,13 +20,7 @@ static void test_normalization(void) {
 }
 
 static void test_provider_parsers(void) {
-    const char claude[] = "{\"rate_limits\":{\"five_hour\":{\"used_percentage\":23.5,\"resets_at\":2000},\"seven_day\":{\"used_percentage\":41.2,\"resets_at\":3000}}}";
     ProviderUsage usage;
-    assert(claude_code_usage_from_statusline(claude, strlen(claude), &usage));
-    assert(usage.window_count == 2);
-    assert(usage_find_window(&usage, "5-hour")->used_percent == 23.5);
-    assert(usage_find_window(&usage, "7-day")->resets_at == 3000);
-
     const char bridge[] = "{\"windows\":[{\"name\":\"daily\",\"used_percent\":31,\"used_tokens\":31,\"quota_tokens\":100,\"resets_at\":4000}]}";
     assert(codex_usage_parse(bridge, strlen(bridge), &usage));
     assert(!strcmp(usage.provider, "Codex") && usage.window_count == 1);
@@ -55,9 +49,9 @@ static void test_cache(void) {
     char directory[] = "/tmp/loutre-usage-test-XXXXXX";
     assert(mkdtemp(directory));
     char path[512];
-    assert(snprintf(path, sizeof(path), "%s/nested/claude.json", directory) > 0);
+    assert(snprintf(path, sizeof(path), "%s/nested/codex.json", directory) > 0);
     ProviderUsage source;
-    usage_init(&source, "Claude Code");
+    usage_init(&source, "Codex");
     usage_window_init(&source.windows[0], "5-hour");
     source.windows[0].used_percent = 12.5;
     source.windows[0].has_percent = true;
@@ -66,7 +60,7 @@ static void test_cache(void) {
     source.window_count = 1;
     assert(usage_cache_write(path, &source));
     ProviderUsage loaded;
-    assert(usage_cache_read_provider(USAGE_PROVIDER_CLAUDE_CODE, path, &loaded));
+    assert(usage_cache_read_provider(USAGE_PROVIDER_CODEX, path, &loaded));
     assert(loaded.window_count == 1 && loaded.windows[0].used_percent == 12.5);
     assert(unlink(path) == 0);
     char nested[512];
@@ -78,7 +72,7 @@ int main(void) {
     test_normalization();
     test_provider_parsers();
     test_cache();
-    assert(usage_provider_count() == 3);
+    assert(usage_provider_count() == 2 && !usage_provider_find("claude"));
     puts("Usage tests passed");
     return 0;
 }

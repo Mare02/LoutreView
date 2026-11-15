@@ -4,7 +4,6 @@
 
 static const UsageProvider providers[] = {
     {USAGE_PROVIDER_CODEX, "Codex", codex_usage_parse},
-    {USAGE_PROVIDER_CLAUDE_CODE, "Claude Code", claude_code_usage_from_statusline},
     {USAGE_PROVIDER_GEMINI_CLI, "Gemini CLI", gemini_cli_usage_parse}
 };
 
@@ -19,8 +18,6 @@ const UsageProvider *usage_provider_find(const char *name) {
     for (size_t i = 0; i < usage_provider_count(); i++)
         if (!strcasecmp(name, providers[i].name)) return &providers[i];
     if (!strcasecmp(name, "codex")) return &providers[USAGE_PROVIDER_CODEX];
-    if (!strcasecmp(name, "claude") || !strcasecmp(name, "claude-code"))
-        return &providers[USAGE_PROVIDER_CLAUDE_CODE];
     if (!strcasecmp(name, "gemini") || !strcasecmp(name, "gemini-cli"))
         return &providers[USAGE_PROVIDER_GEMINI_CLI];
     return NULL;
